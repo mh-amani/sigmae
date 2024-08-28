@@ -1,0 +1,16 @@
+defaults: 
+  - default
+
+dataset_name_or_path: ./data/cogs
+data_files:
+  train: train.tsv
+  test: test.tsv
+  # you can add gen.tsv, dev.tsv, and so on if you want to, they are out of distribution tho. 
+delimiter: '\t'
+column_names:
+  - 'input'
+  - 'output'
+  - 'in_dist_or_out'
+
+input_label: 'input'
+output_label: 'output'

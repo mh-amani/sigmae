@@ -1,0 +1,14 @@
+defaults:
+  - /model/components/sequence_models/default
+model:
+  _target_: 'transformers.MBartForConditionalGeneration'
+  _convert_: 'partial'
+  _partial_:
+    from_pretrained:
+      pretrained_model_name_or_path: "facebook/mbart-large-50-many-to-many-mmt"
+
+tokenizer:
+  _target_: 'transformers.MBartTokenizer'
+  _convert_: 'partial'
+  _partial_:
+    from_pretrained: "facebook/mbart-large-50-many-to-many-mmt"

@@ -1,0 +1,7 @@
+defaults: 
+ - default
+ - override /model/components/sequence_models@models.sequence_model_xz: bart
+ - override /model/components/sequence_models@models.sequence_model_zx: bart
+ - override /model/components/symbolic_bottlenecks@models.symbolic_autoencoder_wrapper_xzx: bart_bart
+ - override /model/components/symbolic_bottlenecks@models.symbolic_autoencoder_wrapper_zxz: bart_bart
+

@@ -1,0 +1,10 @@
+defaults: 
+  - default
+
+dataset_name_or_path: scan
+name: 'simple' 
+# COULD BE 'simple' 'addprim_jump', 'addprim_turn_left', 'filler_num0', 'filler_num1', 'filler_num2', 'filler_num3', 'length', 
+# 'template_around_right', 'template_jump_around_right', 'template_opposite_right', 'template_right'
+
+input_label: 'commands'
+output_label: 'actions'

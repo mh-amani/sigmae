@@ -1,0 +1,11 @@
+_target_: ???
+config:
+  dimensions: None
+  quantize_vector: True
+  temperature: 1.0
+  encoder_embedding_trainable: True
+  decoder_embedding_trainable: True
+  linear_head_trainable: True
+  encoder_embedding: None
+  decoder_embedding: None
+  linear_head: None

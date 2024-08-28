@@ -1,0 +1,6 @@
+_target_: src.data.dataset.just_load_dataset_from_hf_or_file_and_make_val_test_dataset
+
+dataset_name_or_path: ??? # 'scan' or '/path/to/dataset.json' (start with '/' if it is a file path)
+
+input_label: ???
+output_label: ???

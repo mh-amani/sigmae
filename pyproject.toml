@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=42", "setuptools-scm"]
+
+[tool.setuptools]
+py-modules = ["symbolic_bottleneck"]
+
+[tool.setuptools.dynamic]
+version = {attr = "symbolic_bottleneck.VERSION"}
+
+[project]
+license = {file = "LICENSE"}
+name = "symbolic_bottleneck"
+description = 'A package for allowing generative models being connected through a symbolic bottlenck.'
+authors = [
+    { name = "Mohammad Hossein Amani", email = "mohammad.amani@epfl.ch" }
+]
+requires-python = ">=3.11"
+readme = "README.md"
+dynamic = ["version"]
+
+dependencies = [
+    "torch==2.0.1",
+    "torchvision>=0.15.0",
+    "lightning>=2.0.0",
+    "torchmetrics>=0.11.4",
+    "pytest",         # tests
+    "einops",
+    "datasets==2.14.6",
+    "entmax==1.1",
+    "hydra-core==1.3.2",
+    "ipython==8.15.0",
+    "jsonlines==3.1.0",
+    "numpy==1.25.2",
+    "omegaconf==2.3.0",
+    "pandas==2.0.3",
+    "pickleshare==0.7.5",
+    "pytorch-lightning==2.0.7",
+    "pyyaml==6.0.1",
+    "scikit-learn==1.3.0",
+    "scipy==1.11.2",
+    "tqdm==4.66.1",
+    "transformers==4.32.0",
+    "wandb==0.15.8",
+    "sentencepiece=0.2.0"
+]
+
+[project.urls]

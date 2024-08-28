@@ -1,0 +1,19 @@
+defaults:
+  - default
+  
+model:
+  _target_: 'transformers.BartForConditionalGeneration'
+  config: 
+    _target_: 'transformers.BartConfig'
+    d_model: 128
+    encoder_layers: 3
+    decoder_layers: 3
+    vocab_size: 23
+    max_position_embeddings: 40
+    encoder_attention_heads: 2
+    decoder_attention_heads: 2
+    encoder_ffn_dim: 1024
+    decoder_ffn_dim: 1024
+
+tokenizer:
+  _target_: 'transformers.BartTokenizer'
