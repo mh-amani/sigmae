@@ -1,1 +1,4 @@
+defaults:
+  - default
+
 _target_: 'symbolic_bottleneck.modules.discrete_bottlenecks.softmax.SoftmaxDiscreteBottleneck'

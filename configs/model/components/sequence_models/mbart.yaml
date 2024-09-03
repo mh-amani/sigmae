@@ -1,14 +1,16 @@
 defaults:
   - /model/components/sequence_models/default
+
 model:
-  _target_: 'transformers.MBartForConditionalGeneration'
-  _convert_: 'partial'
-  _partial_:
-    from_pretrained:
-      pretrained_model_name_or_path: "facebook/mbart-large-50-many-to-many-mmt"
+  _target_: 'transformers.MBartForConditionalGeneration.from_pretrained'
+  pretrained_model_name_or_path: "facebook/mbart-large-50-many-to-many-mmt"
 
 tokenizer:
-  _target_: 'transformers.MBartTokenizer'
-  _convert_: 'partial'
-  _partial_:
-    from_pretrained: "facebook/mbart-large-50-many-to-many-mmt"
+  _target_: 'transformers.MBartTokenizer.from_pretrained'
+  pretrained_model_name_or_path: "facebook/mbart-large-50-many-to-many-mmt"
+
+model_unwrapper: 
+  _target_: symbolic_bottleneck.modules.model_unwrapper.transformer_enc_dec_unwrapper.EncoderDecoderUnwrapper
+
+config:
+  output_prepending_ids: [2, 250008] # tokenizer.vocab['</s>']: 2, tokenizer.vocab['en_XX']: 250004, tokenizer.vocab['fr_XX']: 250008

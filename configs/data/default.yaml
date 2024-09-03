@@ -20,6 +20,5 @@ overfit_batch: ${overfit_batch} # if not None, only this number of batches will 
 max_x_length: ${model.model_params.max_x_length}
 max_z_length: ${model.model_params.max_z_length}
 
-remove_long_data_points: True
-print_max_lengths: True
+remove_long_data_points_and_print_stats: false
 

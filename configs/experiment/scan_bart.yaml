@@ -1,0 +1,45 @@
+# @package _global_
+
+defaults:
+  - example
+  - override /data/dataset: text/scan_dataset
+  - override /model: bart_softmax_bart_times_two
+
+input_vocab_size: 20
+output_vocab_size: 20
+input_max_position_embeddings: 20
+output_max_position_embeddings: 60
+
+
+
+model:
+  model_params:
+    max_x_length: ${input_max_position_embeddings}
+    max_z_length: ${output_max_position_embeddings}
+  
+  models_config:
+    sequence_model_xz:
+      config:
+        max_lengths:
+          input: ${input_max_position_embeddings}
+          output: ${output_max_position_embeddings}
+        model:
+          vocab_size: ${input_vocab_size}
+          max_position_embeddings: ${input_max_position_embeddings}
+      tokenizer:
+        _target_: transformers.AutoTokenizer.from_pretrained
+        pretrained_model_name_or_path: "./data/tokenizers/scan/commands"
+        add_special_tokens: true
+    
+    sequence_model_zx:
+      config:
+        max_lengths:
+          input: ${output_max_position_embeddings}
+          output: ${input_max_position_embeddings}
+        model:
+          vocab_size: ${output_vocab_size}
+          max_position_embeddings: ${output_max_position_embeddings}
+      tokenizer:
+        _target_: transformers.AutoTokenizer.from_pretrained
+        pretrained_model_name_or_path: "./data/tokenizers/scan/actions"
+        add_special_tokens: true

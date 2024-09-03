@@ -23,55 +23,62 @@ class AbstractDiscreteLayer(nn.Module):
         super().__init__()
         self.config = config
 
-        self.encoder_embedding_dim = config['dimensions']['encoder_embedding_dim']
-        self.vocab_size = config['dimensions']['vocab_size']
-        self.decoder_embedding_dim = config['dimensions']['decoder_embedding_dim']
-        self.unembedding_dim = config['dimensions']['unembedding_dim']
-        self.linear_head_scale = config.get('linear_head_scale', 1.0)
-        self.quantize_vector = config['quantize_vector']
+        self._initialize_dimensions(config)
+        self._initialize_encoder_embedding()
+        self._initialize_decoder_embedding()
+        self._initialize_linear_head()
 
+    def _initialize_dimensions(self, config):
+        dimensions = config.get('dimensions', {})
+        if dimensions is None:
+            dimensions = {}
+        self.vocab_size = dimensions.get('vocab_size', None)
+        self.decoder_embedding_dim = dimensions.get('decoder_embedding_dim', None)
+        self.unembedding_dim = dimensions.get('unembedding_dim', None)
+        self.encoder_embedding_dim = dimensions.get('encoder_embedding_dim', None)
+
+        # Other configuration parameters
+        self.linear_head_scale = config.get('linear_head_scale', 1.0)
+        self.quantize_vector = config.get('quantize_vector', True)
         self.temperature = config.get('temperature', 1.0)
         self.label_smoothing_scale = config.get('label_smoothing_scale', 0.001)
 
-        # initialize the embedding matrix for encoder and decoder
-        if self.config.get('encoder_embedding', None) is not None:
-            # self.encoder_embedding = nn.Embedding(self.vocab_size, self.encoder_embedding_dim).requires_grad_(self.config['encoder_embedding_trainable'])
-            # self.encoder_embedding.weight = nn.Parameter(self.config['encoder_embedding_weight'], 
-            #         requires_grad=self.config['encoder_embedding_trainable'])
-            # nn.parameter clones the tensor
+    def _initialize_encoder_embedding(self):
+        if self.config.get('encoder_embedding') is not None:
+            if self.encoder_embedding_dim is not None or self.vocab_size is not None:
+                raise ValueError('encoder_embedding cannot be provided along with encoder_embedding_dim or vocab_size')
             self.encoder_embedding = self.config['encoder_embedding'].requires_grad_(self.config['encoder_embedding_trainable'])
-        else:
-            self.encoder_embedding = nn.Embedding(self.vocab_size, self.encoder_embedding_dim).requires_grad_(self.config['encoder_embedding_trainable'])
+            self.encoder_embedding_dim = self.encoder_embedding.weight.shape[1]
+            self.vocab_size = self.encoder_embedding.weight.shape[0]
+        elif self.encoder_embedding_dim is not None and self.vocab_size is not None:
+            self.encoder_embedding = nn.Embedding(self.vocab_size, self.encoder_embedding_dim)
+            self.encoder_embedding.requires_grad_(self.config['encoder_embedding_trainable'])
             torch.nn.init.normal_(self.encoder_embedding.weight, mean=0, std=1/math.sqrt(self.encoder_embedding_dim))
+        else:
+            raise ValueError('Either encoder_embedding or both encoder_embedding_dim and vocab_size must be provided')
 
-        if self.config.get('decoder_embedding', None) is not None:
-            # self.decoder_embedding = nn.Embedding(self.vocab_size, self.decoder_embedding_dim).requires_grad_(self.config['decoder_embedding_trainable'])
-            # self.decoder_embedding.weight = nn.Parameter(self.config['decoder_embedding_weight'], 
-                    # requires_grad=self.config['decoder_embedding_trainable'])
-            # nn.parameter clones the tensor
+    def _initialize_decoder_embedding(self):
+        if self.config.get('decoder_embedding') is not None:
             self.decoder_embedding = self.config['decoder_embedding'].requires_grad_(self.config['decoder_embedding_trainable'])
-        else:
-            self.decoder_embedding = nn.Embedding(self.vocab_size, self.decoder_embedding_dim).requires_grad_(self.config['decoder_embedding_trainable'])
+            self.decoder_embedding_dim = self.decoder_embedding.weight.shape[1]
+            assert self.vocab_size == self.decoder_embedding.weight.shape[0]
+        elif self.decoder_embedding_dim is not None and self.vocab_size is not None:
+            self.decoder_embedding = nn.Embedding(self.vocab_size, self.decoder_embedding_dim)
+            self.decoder_embedding.requires_grad_(self.config['decoder_embedding_trainable'])
             torch.nn.init.normal_(self.decoder_embedding.weight, mean=0, std=1/math.sqrt(self.decoder_embedding_dim))
-        
-        # initialize the linear head
-        if self.config.get('linear_head', None) is not None:
-            # self.linear_head = nn.Linear(self.decoder_embedding_dim, self.unembedding_dim).requires_grad_(self.config['linear_head_trainable'])
-            # self.linear_head.weight = nn.Parameter(self.config['linear_head_weight'],
-            #         requires_grad=self.config['linear_head_trainable'])
-            # nn.parameter clones the tensor
-            self.linear_head = self.config['linear_head'].requires_grad_(self.config['linear_head_trainable'])
         else:
-            self.linear_head = nn.Linear(self.decoder_embedding_dim, self.unembedding_dim).requires_grad_(self.config['linear_head_trainable'])
+            raise ValueError('Either decoder_embedding or both decoder_embedding_dim and vocab_size must be provided')
+
+    def _initialize_linear_head(self):
+        if self.config.get('linear_head') is not None:
+            self.linear_head = self.config['linear_head'].requires_grad_(self.config['linear_head_trainable'])
+        elif self.decoder_embedding_dim is not None and self.unembedding_dim is not None:
+            self.linear_head = nn.Linear(self.decoder_embedding_dim, self.unembedding_dim)
+            self.linear_head.requires_grad_(self.config['linear_head_trainable'])
             torch.nn.init.normal_(self.linear_head.weight, mean=0, std=1/math.sqrt(self.unembedding_dim))
-        
-        # if self.config.get('linear_head_bias', None) is not None:
-        #     # self.linear_head.bias = nn.Parameter(self.config['linear_head_bias'], requires_grad=self.config['linear_head_trainable'])
-        #     # nn.parameter clones the tensor
-        #     self.linear_head.bias = self.config['linear_head_bias'].requires_grad_(self.config['linear_head_trainable'])
-        # else:
-        #     self.linear_head.bias = nn.Parameter(torch.zeros(self.unembedding_dim), requires_grad=self.config['linear_head_trainable'])
-        
+        else:
+            raise ValueError('Either linear_head or both decoder_embedding_dim and unembedding_dim must be provided')
+
     def forward(self, x,**kwargs):
         continous_vector = self.linear_head(x)
         continous_vector = continous_vector * self.linear_head_scale

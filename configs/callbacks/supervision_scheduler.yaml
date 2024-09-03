@@ -2,7 +2,7 @@ supervision_scheduler:
   _target_: src.models.callbacks.supervision_probability_callback.SupervisionProbabilitySchedulerCallback
 
   scheduler_xz: 
-    _target_: src.schedulers.linear_scheduler.LinearScheduler
+    _target_: src.utils.schedulers.linear_scheduler.LinearScheduler
     num_warmup_steps: 25
     num_training_steps: 80
     hp_init: 1.0
@@ -11,7 +11,7 @@ supervision_scheduler:
 
   scheduler_z:
     # between 0 and 1, saying given that a sample is not xz, how likely is it to be z.
-    _target_: src.schedulers.linear_scheduler.LinearScheduler
+    _target_: src.utils.schedulers.linear_scheduler.LinearScheduler
     num_warmup_steps: 25
     num_training_steps: 80
     hp_init: 0.9

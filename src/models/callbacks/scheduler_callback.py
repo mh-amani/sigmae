@@ -1,7 +1,7 @@
 from typing import Type
 import functools
 from pytorch_lightning import Callback, LightningModule, Trainer
-from src.schedulers.abstract_scheduler import AbstractScheduler
+from src.utils.schedulers.abstract_scheduler import AbstractScheduler
 
 
 class SchedulerCallback(Callback):

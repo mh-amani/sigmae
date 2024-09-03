@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional, Tuple, Callable
 import torch
+import numpy as np
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 import hydra
@@ -31,7 +32,6 @@ class AbstractPLDataModule(LightningDataModule):
         batch_size: int = 32,
         num_workers: int = 0,
         pin_memory: bool = False,
-        collate_fn: Callable = None,
         seed: int = 42,
         **kwargs
     ) -> None:
@@ -43,7 +43,6 @@ class AbstractPLDataModule(LightningDataModule):
         :param batch_size: The batch size. Defaults to 32.
         :param num_workers: The number of workers for data loading. Defaults to 0.
         :param pin_memory: Whether to pin memory in data loaders. Defaults to False.
-        :param collate_fn: The collate function to use in data loaders.
         :param seed: Random seed for reproducibility. Defaults to 42.
         """
         super().__init__()
@@ -55,7 +54,6 @@ class AbstractPLDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-        self.collate_fn = collate_fn
         self.seed = seed
         self.kwargs = kwargs
 
@@ -64,14 +62,21 @@ class AbstractPLDataModule(LightningDataModule):
         self.data_test: Optional[Dataset] = None
 
         self.batch_size_per_device = batch_size
-        dataset_dict = hydra.utils.call(self.hparams.dataset, train_val_test_split=self.hparams.train_val_test_split) # only to test and debug, comment out before production
+        # dataset_dict = hydra.utils.call(self.hparams.dataset, train_val_test_split=self.hparams.train_val_test_split) # only to test and debug, comment out before production
 
     def prepare_data(self) -> None:
         """
         Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y).
+        I am doing it in a way, but i think this is the only way!
         """
-        _ = hydra.utils.instantiate(self.hparams.dataset)
+        # moved to setup
+        # AbstractPLDataModule.Data = hydra.utils.instantiate(self.hparams.dataset, train_val_test_split=self.hparams.train_val_test_split)
+        # After setting up the datasets, remove long data points and print statistics
+        # self.tokenizer_x = self.trainer.model.tokenizer_x
+        # self.tokenizer_z = self.trainer.model.tokenizer_z
+        # if self.kwargs.get('remove_long_data_points_and_print_stats', False):
+        #     self.remove_long_data_points_and_print_stats(AbstractPLDataModule.Data)
 
     def setup(self, stage: Optional[str] = None) -> None:
         """
@@ -79,6 +84,11 @@ class AbstractPLDataModule(LightningDataModule):
 
         :param stage: Current stage of training ('fit', 'validate', 'test', or 'predict').
         """
+        self.tokenizer_x = self.trainer.model.tokenizer_x
+        self.tokenizer_z = self.trainer.model.tokenizer_z
+        if self.kwargs.get('remove_long_data_points_and_print_stats', False):
+            self.remove_long_data_points_and_print_stats(AbstractPLDataModule.Data)
+
         if self.trainer is not None:
             if self.hparams.batch_size % self.trainer.world_size != 0:
                 raise RuntimeError(
@@ -92,15 +102,6 @@ class AbstractPLDataModule(LightningDataModule):
             self.data_train = AbstractDataset(dataset['train'], self.supervision_ratio)
             self.data_val = AbstractDataset(dataset['validation'], [1.0, 0.0])  # Fully supervised
             self.data_test = AbstractDataset(dataset['test'], [1.0, 0.0])  # Fully supervised
-
-        # After setting up the datasets, remove long data points and print statistics
-        self.tokenizer_x = self.trainer.model.tokenizer_x
-        self.tokenizer_z = self.trainer.model.tokenizer_z
-        if self.kwargs.get('remove_long_data_points', False):
-            self.remove_long_data_points()
-        if self.kwargs.get('print_max_lengths', False):
-            self.print_max_lengths()
- 
 
     def train_dataloader(self) -> DataLoader:
         """
@@ -164,6 +165,7 @@ class AbstractPLDataModule(LightningDataModule):
             pin_memory=self.pin_memory,
             collate_fn=self.collate_fn,
             shuffle=False,
+            persistent_workers=True
         )
 
     def teardown(self, stage: Optional[str] = None) -> None:
@@ -190,61 +192,81 @@ class AbstractPLDataModule(LightningDataModule):
         """
         pass
 
-    def remove_long_data_points(self):
+    def remove_long_data_points_and_print_stats(self, dataset):
         """
-        Remove data points that exceed the maximum length for x or z.
-        This method modifies the train, validation, and test datasets in-place.
+        Remove long data points and print statistics for all splits.
         """
-        for split, dataset in [('train', self.data_train), ('val', self.data_val), ('test', self.data_test)]:
-            if dataset is None:
+        for split, split_dataset in dataset.items():
+            if split_dataset is None:
                 continue
 
-            filtered_data = []
-            counter = 0
-            for i in range(len(dataset)):
-                collated_batch = self.collate_fn([dataset[i]], cut_to_max_length=False)
-                if (collated_batch['x_ids'].shape[1] <= self.dataset_parameters["max_x_length"] and 
-                    collated_batch['z_ids'].shape[1] <= self.dataset_parameters["max_z_length"]):
-                    data_i = dataset[i]
-                    data_i['id'] = counter
-                    counter += 1
-                    filtered_data.append(data_i)
-            
-            dataset.datum[split] = filtered_data
-            setattr(self, f'data_{split}', dataset)
+            stats = {
+                'max_x_length': 0,
+                'max_z_length': 0,
+                'larger_than_max_x': 0,
+                'larger_than_max_z': 0,
+                'total_samples': len(split_dataset),
+                'filtered_data': []
+            }
 
-    def print_max_lengths(self):
-        """
-        Print statistics about the maximum lengths of x and z in the training dataset,
-        and the percentage of data points that exceed the specified maximum lengths.
-        """
-        if self.data_train is None:
-            print("Training data not available. Please run setup() first.")
-            return
+            for i, item in enumerate(split_dataset):
+                x_length, z_length = self._get_lengths(item)
+                self._update_stats(stats, x_length, z_length)
 
-        max_x_length = 0
-        larger_than_max_x_length = 0
-        max_z_length = 0
-        larger_than_max_z_length = 0
-        total_samples = len(self.data_train)
+                if self._is_valid_length(x_length, z_length):
+                    item['id'] = len(stats['filtered_data'])
+                    stats['filtered_data'].append(item)
 
-        for i in range(total_samples):
-            collated_batch = self.collate_fn([self.data_train[i]], cut_to_max_length=False)
-            x_length = collated_batch['x_ids'].shape[1]
-            z_length = collated_batch['z_ids'].shape[1]
+            self._update_dataset(split, split_dataset, stats['filtered_data'])
+            self._print_stats(split, stats)
 
-            max_x_length = max(max_x_length, x_length)
-            max_z_length = max(max_z_length, z_length)
+    def _get_lengths(self, item):
+        x_encoding = self.tokenizer_x(item['x'], truncation=False, return_tensors="pt")
+        z_encoding = self.tokenizer_z(item['z'], truncation=False, return_tensors="pt")
+        # x_encoding, z_encoding = self.collate_fn([item])
+        return x_encoding['input_ids'].shape[1], z_encoding['input_ids'].shape[1]
 
-            if x_length > self.dataset_parameters["max_x_length"]:
-                larger_than_max_x_length += 1
-            if z_length > self.dataset_parameters["max_z_length"]:
-                larger_than_max_z_length += 1
+    def _update_stats(self, stats, x_length, z_length):
+        stats['max_x_length'] = max(stats['max_x_length'], x_length)
+        stats['max_z_length'] = max(stats['max_z_length'], z_length)
+        stats['larger_than_max_x'] += x_length > self.kwargs["max_x_length"]
+        stats['larger_than_max_z'] += z_length > self.kwargs["max_z_length"]
 
-        print(f"Max x length before cut-off: {max_x_length}")
-        print(f"Max z length before cut-off: {max_z_length}")
-        print(f"Percentage of x data points that are cut off: {larger_than_max_x_length / total_samples:.2%}")
-        print(f"Percentage of z data points that are cut off: {larger_than_max_z_length / total_samples:.2%}")
+    def _is_valid_length(self, x_length, z_length):
+        return (x_length <= self.kwargs["max_x_length"] and 
+                z_length <= self.kwargs["max_z_length"])
+
+    def _update_dataset(self, split, split_dataset, filtered_data):
+        split_dataset.datum = filtered_data
+        setattr(self, f'data_{split}', split_dataset)
+
+    def _print_stats(self, split, stats):
+        print(f"\nStatistics for {split} split:")
+        print(f"Max x length before cut-off: {stats['max_x_length']}")
+        print(f"Max z length before cut-off: {stats['max_z_length']}")
+        print(f"Percentage of x data points that are cut off: {stats['larger_than_max_x'] / stats['total_samples']:.2%}")
+        print(f"Percentage of z data points that are cut off: {stats['larger_than_max_z'] / stats['total_samples']:.2%}")
+        print(f"Total samples after filtering: {len(stats['filtered_data'])}")
+
+    def collate_fn(self, batch):
+        x_texts = [item['x'] for item in batch]
+        z_texts = [item['z'] for item in batch]
+        data_type = np.array([item['data_type'] for item in batch])
+        data_type = torch.tensor(data_type)
+        ids = np.array([item['id'] for item in batch])
+        ids = torch.tensor(ids)
+        
+        x_encodings = self.tokenizer_x(x_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        z_encodings = self.tokenizer_z(z_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        
+        return {
+            'x_ids': x_encodings['input_ids'],
+            'x_mask': x_encodings['attention_mask'],
+            'z_ids': z_encodings['input_ids'],
+            'z_mask': z_encodings['attention_mask'],
+            'data_type': data_type,
+            'ids': ids
+        }
 
 if __name__ == "__main__":
     _ = AbstractPLDataModule("path/to/dataset", [0.8, 0.1], [0.7, 0.3])

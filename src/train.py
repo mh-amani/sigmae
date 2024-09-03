@@ -1,5 +1,8 @@
 from typing import Any, Dict, List, Optional, Tuple
 
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import hydra
 import lightning as L
 import rootutils
@@ -7,6 +10,12 @@ import torch
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
+from src.utils import hydra_custom_resolvers
+
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hub.file_download")
+warnings.filterwarnings("ignore", message="incompatible copy of pydevd already imported")
+
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #

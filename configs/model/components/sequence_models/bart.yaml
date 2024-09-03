@@ -5,15 +5,26 @@ model:
   _target_: 'transformers.BartForConditionalGeneration'
   config: 
     _target_: 'transformers.BartConfig'
-    d_model: 128
-    encoder_layers: 3
-    decoder_layers: 3
+    d_model: 512
+    encoder_layers: 4
+    decoder_layers: 4
     vocab_size: 23
-    max_position_embeddings: 40
-    encoder_attention_heads: 2
-    decoder_attention_heads: 2
+    max_position_embeddings: ${add_int:${model.model_params.max_x_length},${model.model_params.max_z_length}}
+    encoder_attention_heads: 8
+    decoder_attention_heads: 8
     encoder_ffn_dim: 1024
     decoder_ffn_dim: 1024
 
+# tokenizer:
+#   _target_: 'transformers.BartTokenizer.from_pretrained'
+#   pretrained_model_name_or_path: "facebook/bart-large"
+
 tokenizer:
-  _target_: 'transformers.BartTokenizer'
+  _target_: 'tokenizers.Tokenizer.from_file'
+  pretrained_model_name_or_path: ???
+
+model_unwrapper: 
+  _target_: symbolic_bottleneck.modules.model_unwrapper.transformer_enc_dec_unwrapper.EncoderDecoderUnwrapper
+
+config:
+  output_prepending_ids: null

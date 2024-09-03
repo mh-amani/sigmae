@@ -117,3 +117,18 @@ def get_metric_value(metric_dict: Dict[str, Any], metric_name: Optional[str]) ->
     log.info(f"Retrieved metric value! <{metric_name}={metric_value}>")
 
     return metric_value
+
+
+# # make tokenizers add special tokens, (bos and eos)
+# def set_tokenizer_build_inputs_with_special_tokens(tokenizer):
+#     from transformers import PreTrainedTokenizerFast
+#     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+#         if token_ids_1 is None:
+#             return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+#         return [self.bos_token_id] + token_ids_0 + [self.eos_token_id] + [self.bos_token_id] + token_ids_1 + [self.eos_token_id]
+
+#         # custom_tokenizer.build_inputs_with_special_tokens
+#     tokenizer.build_inputs_with_special_tokens = build_inputs_with_special_tokens.__get__(tokenizer, PreTrainedTokenizerFast)
+#     # tokenizer.build_inputs_with_special_tokens = tokenizer_inputs_with_eos_and_bos
+
+ 

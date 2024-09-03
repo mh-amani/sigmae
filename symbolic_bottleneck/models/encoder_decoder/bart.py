@@ -46,7 +46,10 @@ def UnWrappedMBart(config_mbart, discretizer_config):
     
     return model, vector_model, discretizer
 
-def transform_xy_outputs_to_y_inputs_bart_bart(xy_outputs: Dict[str, Any]) -> Dict[str, Any]:
+def transform_xy_outputs_to_y_inputs_bart_bart(xy_outputs):
     # since bart output has a eos <\s> token prepended in its output, we remove it for feeding to the next model
     return {'output_attention_mask': xy_outputs['output_attention_mask'][:, 1:],
             'quantized_vector_encoder': xy_outputs['quantized_vector_encoder'][:, 1:]}
+
+def return_transformation_xy_outputs_from_y_inputs():
+    return transform_xy_outputs_to_y_inputs_bart_bart

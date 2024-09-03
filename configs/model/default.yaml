@@ -1,10 +1,12 @@
 defaults:
-  - /model/components/sequence_models@models.sequence_model_xz: default
-  - /model/components/symbolic_bottlenecks@models.symbolic_autoencoder_wrapper_xzx: default
-  - /model/components/sequence_models@models.sequence_model_zx: default
-  - /model/components/symbolic_bottlenecks@models.symbolic_autoencoder_wrapper_zxz: default
+  - /model/components/sequence_models@models_config.sequence_model_xz: default
+  - /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_xzx: default
+  - /model/components/sequence_models@models_config.sequence_model_zx: default
+  - /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_zxz: default
+  - /model/components/discretizers@models_config.discretizer_x: default
+  - /model/components/discretizers@models_config.discretizer_z: default
 
-_target_: src.models.sigmae_lit_module.SigmaAELitModule
+_target_: src.models.sigmae_lit_module_base.SigmaeLitModuleBase
 
 model_params:
   max_x_length: 100
@@ -13,13 +15,13 @@ model_params:
 
 optimizer:
   _target_: torch.optim.Adam
-  _partial_: true
+  # _partial_: true # it will return a partial function
   lr: 0.001
   weight_decay: 0.0
 
 scheduler:
   _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
-  _partial_: true
+  # _partial_: true # it will return a partial function
   mode: min
   factor: 0.1
   patience: 10

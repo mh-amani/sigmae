@@ -1,2 +1,5 @@
 
-transform_xy_outputs_to_y_inputs: ???
+_target_: symbolic_bottleneck.symbolic_autoencoder_wrapper.SymbolicAutoEncoderWrapper
+
+config:
+  transform_xy_outputs_to_y_inputs: ???

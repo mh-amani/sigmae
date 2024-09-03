@@ -1,6 +1,7 @@
 defaults:
   - default
 
-transform_xy_outputs_to_y_inputs:
-  _target_: symbolic_bottleneck.models.encoder_decoder.bart.transform_xy_outputs_to_y_inputs_bart_bart
+config:
+  transform_xy_outputs_to_y_inputs:
+    _target_: symbolic_bottleneck.models.encoder_decoder.bart.return_transformation_xy_outputs_from_y_inputs
 

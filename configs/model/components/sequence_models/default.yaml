@@ -1,20 +1,23 @@
-__target__: symbolic_bottleneck.auto_reg_wrapper.AutoRegWrapper
+_target_: symbolic_bottleneck.auto_reg_wrapper.AutoRegWrapper
 
-use_past_key_values: False
-use_last_step_states: False
-max_lengths:
-  input: 45
-  output: 45
-control_token_ids:
-  input_pad_token_id: null
-  output_eos_token_id: null 
-  output_pad_token_id: null
-  output_unknown_token_id: null
-soft_average:
-  p_eos_backward: True
-  p_eos_forward: False 
-  word_embeds_with_scores_forward: True
+config:
+  use_past_key_values: False
+  use_last_step_states: False
+  max_lengths:
+    input: 45
+    output: 45
+  control_token_ids:
+    input_pad_token_id: null
+    output_eos_token_id: null 
+    output_pad_token_id: null
+    output_unknown_token_id: null
+  soft_average:
+    p_eos_backward: True
+    p_eos_forward: False 
+    word_embeds_with_scores_forward: True
   output_prepending_ids: null
+  device: cpu
 
 model:  ???
 tokenizer:  ??? 
+model_unwrapper:  ???

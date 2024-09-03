@@ -1,7 +1,8 @@
 from typing import Type,Sequence
 import functools
-from pytorch_lightning import Callback, LightningModule, Trainer
-from src.schedulers.abstract_scheduler import AbstractScheduler
+from pytorch_lightning import LightningModule, Trainer
+from lightning.pytorch import Callback
+from src.utils.schedulers.abstract_scheduler import AbstractScheduler
 import wandb
 import torch
 

@@ -1,0 +1,22 @@
+defaults: 
+ - default
+ - override /model/components/sequence_models@models_config.sequence_model_xz: bart
+ - override /model/components/sequence_models@models_config.sequence_model_zx: bart
+ - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_xzx: bart_bart
+ - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_zxz: bart_bart
+ - override /model/components/discretizers@models_config.discretizer_x: softmaxDB
+ - override /model/components/discretizers@models_config.discretizer_z: softmaxDB
+
+models_config:
+  sequence_model_xz: 
+    config:
+      max_lengths:
+        input: ${model.model_params.max_x_length}
+        output: ${model.model_params.max_z_length}
+  
+  sequence_model_zx: 
+    config:
+      max_lengths:
+        input: ${model.model_params.max_z_length}
+        output: ${model.model_params.max_x_length}
+
