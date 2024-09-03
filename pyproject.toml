@@ -19,7 +19,7 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    "torch==2.0.1",
+    "torch==2.4.0",
     "torchvision>=0.15.0",
     "lightning>=2.0.0",
     "torchmetrics>=0.11.4",
