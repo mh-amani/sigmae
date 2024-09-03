@@ -26,7 +26,7 @@ dependencies = [
     "pytest",         # tests
     "einops",
     "datasets==2.14.6",
-    "entmax==1.1",
+    "entmax==1.3",
     "hydra-core==1.3.2",
     "ipython==8.15.0",
     "jsonlines==3.1.0",
