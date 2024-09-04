@@ -43,10 +43,20 @@ class AbstractDiscreteLayer(nn.Module):
         self.temperature = config.get('temperature', 1.0)
         self.label_smoothing_scale = config.get('label_smoothing_scale', 0.001)
 
+    def _check_consistency(self, embedding, embedding_dim, embedding_name):
+        if self.vocab_size is not None and self.vocab_size != embedding.weight.shape[0]:
+            raise ValueError(f'Inconsistent vocab_size for {embedding_name} embedding.' + 
+                             f'Both an {embedding_name} (shape: {embedding.weight.shape}) and a vocab_size ({self.vocab_size}) were provided, but they do not match.' +
+                             f'Either provide only the embedding or provide the vocab_size and embedding_dim or make sure they are consistent.')
+            
+        if embedding_dim is not None and embedding_dim != embedding.weight.shape[1]:
+            raise ValueError(f'Inconsistent embedding_dim for {embedding_name} embedding.' + 
+                             f'Both an {embedding_name} (shape: {embedding.weight.shape}) and an embedding_dim ({embedding_dim}) were provided, but they do not match.' +
+                             f'Either provide only the embedding or provide the vocab_size and embedding_dim or make sure they are consistent.')
+
     def _initialize_encoder_embedding(self):
         if self.config.get('encoder_embedding') is not None:
-            if self.encoder_embedding_dim is not None or self.vocab_size is not None:
-                raise ValueError('encoder_embedding cannot be provided along with encoder_embedding_dim or vocab_size')
+            self._check_consistency(self.config['encoder_embedding'], self.encoder_embedding_dim, 'encoder_embedding')
             self.encoder_embedding = self.config['encoder_embedding'].requires_grad_(self.config['encoder_embedding_trainable'])
             self.encoder_embedding_dim = self.encoder_embedding.weight.shape[1]
             self.vocab_size = self.encoder_embedding.weight.shape[0]
@@ -59,9 +69,12 @@ class AbstractDiscreteLayer(nn.Module):
 
     def _initialize_decoder_embedding(self):
         if self.config.get('decoder_embedding') is not None:
+            self._check_consistency(self.config['decoder_embedding'], self.decoder_embedding_dim, 'encoder_embedding')
             self.decoder_embedding = self.config['decoder_embedding'].requires_grad_(self.config['decoder_embedding_trainable'])
             self.decoder_embedding_dim = self.decoder_embedding.weight.shape[1]
-            assert self.vocab_size == self.decoder_embedding.weight.shape[0]
+            assert self.vocab_size == self.decoder_embedding.weight.shape[0], \
+                'vocab_size and decoder_embedding do not match (can happen if your encoder_embedding and decoder_embedding have a different vocab_size)'
+                
         elif self.decoder_embedding_dim is not None and self.vocab_size is not None:
             self.decoder_embedding = nn.Embedding(self.vocab_size, self.decoder_embedding_dim)
             self.decoder_embedding.requires_grad_(self.config['decoder_embedding_trainable'])
