@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, Dataset
 import hydra
 from src.data.dataset import AbstractDataset
 from src.data.samplers import RandomSupervisionSampler, RandomSupervisionSamplerDDP
+from functools import partial
 
 class AbstractPLDataModule(LightningDataModule):
     """
@@ -109,31 +110,34 @@ class AbstractPLDataModule(LightningDataModule):
 
         :return: The train dataloader.
         """
-        g = torch.Generator()
-        g.manual_seed(self.seed)
 
         if self.kwargs.get('use_ddp', False):
-            sampler = randomSupervisionSamplerDDP(
+            self.train_sampler = RandomSupervisionSamplerDDP(
                 dataset=self.data_train,
                 data_type_sampling_probability=self.data_type_sampling_probability,
-                batch_size=self.batch_size_per_device
+                batch_size=self.batch_size_per_device,
+                seed=self.seed
             )
         else:
-            sampler = randomSupervisionSampler(
+            self.train_sampler = RandomSupervisionSampler(
                 self.data_train,
                 self.data_type_sampling_probability,
                 batch_size=self.batch_size_per_device,
-                generator=g
+                seed=self.seed
             )
+        
+        
+        collate_fn = partial(self.collate_fn, tokenizer_x=self.tokenizer_x, tokenizer_z=self.tokenizer_z)
 
         return DataLoader(
             dataset=self.data_train,
             batch_size=self.batch_size_per_device,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            collate_fn=self.collate_fn,
-            sampler=sampler,
+            collate_fn=collate_fn,
+            sampler=self.train_sampler
         )
+        # return self._get_dataloader(self.data_train)
 
     def val_dataloader(self) -> DataLoader:
         """
@@ -158,12 +162,13 @@ class AbstractPLDataModule(LightningDataModule):
         :param dataset: The dataset to create a dataloader for.
         :return: A DataLoader instance.
         """
+        collate_fn = partial(self.collate_fn, tokenizer_x=self.tokenizer_x, tokenizer_z=self.tokenizer_z)
         return DataLoader(
             dataset=dataset,
             batch_size=self.batch_size_per_device,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            collate_fn=self.collate_fn,
+            collate_fn=collate_fn,
             shuffle=False,
             persistent_workers=True
         )
@@ -248,7 +253,8 @@ class AbstractPLDataModule(LightningDataModule):
         print(f"Percentage of z data points that are cut off: {stats['larger_than_max_z'] / stats['total_samples']:.2%}")
         print(f"Total samples after filtering: {len(stats['filtered_data'])}")
 
-    def collate_fn(self, batch):
+    @staticmethod
+    def collate_fn(batch, tokenizer_x, tokenizer_z):
         x_texts = [item['x'] for item in batch]
         z_texts = [item['z'] for item in batch]
         data_type = np.array([item['data_type'] for item in batch])
@@ -256,8 +262,8 @@ class AbstractPLDataModule(LightningDataModule):
         ids = np.array([item['id'] for item in batch])
         ids = torch.tensor(ids)
         
-        x_encodings = self.tokenizer_x(x_texts, padding=True, return_tensors="pt", add_special_tokens=True)
-        z_encodings = self.tokenizer_z(z_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        x_encodings = tokenizer_x(x_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        z_encodings = tokenizer_z(z_texts, padding=True, return_tensors="pt", add_special_tokens=True)
         
         return {
             'x_ids': x_encodings['input_ids'],

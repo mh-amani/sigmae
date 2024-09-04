@@ -8,6 +8,6 @@ config:
   encoder_embedding_trainable: True
   decoder_embedding_trainable: True
   linear_head_trainable: True
-  encoder_embedding: None
-  decoder_embedding: None
-  linear_head: None
+  encoder_embedding: null
+  decoder_embedding: null
+  linear_head: null

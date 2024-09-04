@@ -86,12 +86,12 @@ class SigmaeLitModuleBase(LightningModule):
         for split in ['train', 'val', 'test']:
             self.accuracies[split] = {}
             self.losses[split] = {}
-            for space in ['xz', 'zx', 'xzx', 'zxx']:
+            for space in ['xz', 'zx', 'xzx', 'zxz']:
                 self.accuracies[split][space] = {}
                 self.losses[split][space] = {}
                 for medium in ['token', 'sequence']:
                     # metric objects for calculating and averaging accuracy across batches
-                    self.accuracies[split][space][medium] = Accuracy(task="multiclass", num_classes=num_classes_x if space == 'x' else num_classes_z)
+                    self.accuracies[split][space][medium] = Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)
                     # for averaging loss across batches
                     self.losses[split][space][medium] = MeanMetric()
                 
@@ -150,8 +150,9 @@ class SigmaeLitModuleBase(LightningModule):
         self.auto_reg_wrapped_model_zx = hydra.utils.instantiate(autoreg_sequence_model_xz, vector_model=self.sequence_model_zx, input_discretizer=self.discretizer_z, output_discretizer=self.discretizer_x,)
 
         self.symbolic_autoencoder_wrapper_xzx = hydra.utils.instantiate(models_config.symbolic_autoencoder_wrapper_xzx, self.auto_reg_wrapped_model_xz, self.auto_reg_wrapped_model_zx)
+        self.symbolic_autoencoder_wrapper_xzx.transform_xy_outputs_to_y_inputs = self.symbolic_autoencoder_wrapper_xzx.config['transform_xy_outputs_to_y_inputs']
         self.symbolic_autoencoder_wrapper_zxz = hydra.utils.instantiate(models_config.symbolic_autoencoder_wrapper_zxz, self.auto_reg_wrapped_model_zx, self.auto_reg_wrapped_model_xz)
-    
+        self.symbolic_autoencoder_wrapper_zxz.transform_xy_outputs_to_y_inputs = self.symbolic_autoencoder_wrapper_zxz.config['transform_xy_outputs_to_y_inputs']
 
     def forward(self, x_ids, x_mask, z_ids, z_mask, data_type, stage='train') -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
@@ -160,35 +161,33 @@ class SigmaeLitModuleBase(LightningModule):
         :return: A tensor of logits.
         """
         outputs = {}
-        data_type = torch.all(data_type, dim=0)
-        if (data_type[0] and data_type[1]) or stage!='train':
+        labels = {}
+        if (data_type[0] and data_type[1]) or stage!='fit':
             xz_outputs = self.auto_reg_wrapped_model_xz(input_ids=x_ids, output_ids=z_ids,
                 teacher_force_output=True, max_output_length=z_mask.shape[1])
+            outputs['xz'] = xz_outputs
+            labels['xz'] = z_ids
             
-            zx_outputs = self.auto_reg_wrapped_model_zx(input_ids=z_ids, input_attention_mask=z_mask,
-                output_ids=x_ids, output_attention_mask=x_mask,
+            zx_outputs = self.auto_reg_wrapped_model_zx(input_ids=z_ids, output_ids=x_ids,
                 teacher_force_output=True, max_output_length=x_mask.shape[1])
-        
-        if (data_type[0] and not data_type[1]) or (stage!='train') or (data_type[0] and data_type[1] and self.usexzx_with_supervised_training):
-            xzx_outputs = self.symbolic_autoencoder_wrapper_xzx(input_ids=x_ids, input_attention_mask=x_mask,)
+            outputs['zx'] = zx_outputs
+            labels['zx'] = x_ids
 
-        if (data_type[1] and not data_type[0]) or (stage!='train') or (data_type[0] and data_type[1] and self.usezxz_with_supervised_training):
-            zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(input_ids=z_ids, input_attention_mask=z_mask,)
-   
+        if (data_type[0] and not data_type[1]) or (stage!='fit') or (data_type[0] and data_type[1] and self.usexzx_with_supervised_training):
+            xzx_outputs = self.symbolic_autoencoder_wrapper_xzx(x_ids=x_ids, z_ids=x_ids)
+            outputs['xzx'] = xzx_outputs
+            outputs['xzx']['logit'] = outputs['xzx']['logit_z']
+            labels['xzx'] = x_ids
 
-    def on_train_start(self) -> None:
-        """Lightning hook that is called when training begins."""
-        # by default lightning executes validation step sanity checks before training starts,
-        # so it's worth to make sure validation metrics don't store results from these checks
-        for split in ['train', 'val', 'test']:  
-            for space in ['xz', 'zx', 'xzx', 'zxx']:
-                for medium in ['token', 'sequence']:
-                    self.accuracies[split][space][medium].reset()
-                    self.losses[split][space][medium].reset()
-        self.val_acc_best.reset()
+        if (data_type[1] and not data_type[0]) or (stage!='fit') or (data_type[0] and data_type[1] and self.usezxz_with_supervised_training):
+            zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_ids=z_ids, z_ids=z_ids)
+            outputs['zxz'] = zxz_outputs
+            outputs['zxz']['logit'] = outputs['zxz']['logit_z']
+            labels['zxz'] = z_ids
+        return outputs, labels
 
     def model_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor],) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        self, batch: Tuple[torch.Tensor, torch.Tensor], stage) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Perform a single model step on a batch of data.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target labels.
@@ -198,14 +197,50 @@ class SigmaeLitModuleBase(LightningModule):
             - A tensor of predictions.
             - A tensor of target labels.
         """
-        stage = self.trainer.state.stage._value_ # stages are 'fit', 'validate', 'test', 'predict', 'sanity_check'
-
+        # stage = self.trainer.state.stage._value_ # stages are 'fit', 'validate', 'test', 'predict', 'sanity_check'
         x_ids, x_mask, z_ids, z_mask, data_type = batch['x_ids'], batch['x_mask'], batch['z_ids'], batch['z_mask'], batch['data_type']
-        
-        logits = self.forward(x_ids, x_mask, z_ids, z_mask, data_type, stage=stage)
-        loss = self.criterion(logits, labels)
-        preds = torch.argmax(logits, dim=1)
-        return loss, preds, labels
+        data_type = torch.all(data_type, dim=0)
+
+        # update and log metrics
+        self.log(f"{stage}/x_data_available", float(data_type[0]), sync_dist=True)
+        self.log(f"{stage}/z_data_available", float(data_type[1]),  sync_dist=True)
+        self.log(f"{stage}/global_step", float(self.global_step), sync_dist=True)
+
+        # forward pass
+        outputs, labels = self.forward(x_ids, x_mask, z_ids, z_mask, data_type, stage=stage)
+        # compute losses, predictions and update metrics
+        losses = {}
+        preds = {}
+        for space in outputs.keys():
+            loss = self.criterion(outputs[space]['logit'][..., :-1, :].permute(0, 2, 1), labels[space][..., 1:])
+            preds[space] = torch.argmax(outputs[space]['logit'], dim=-1)
+            losses[space] = loss
+
+            self.losses[stage][space]['token'].update(losses[space])
+            loss += losses[space]
+            self.accuracies[stage][space]['token'](preds[space][..., :-1], labels[space][..., 1:])
+            
+            # Use the metric_attribute parameter to specify the attribute name
+            self.log(f"{stage}/{space}/loss", self.losses[stage][space]['token'], 
+                     on_step=False, on_epoch=True, prog_bar=True, 
+                     metric_attribute=f"losses_{stage}_{space}_token")
+            
+            self.log(f"{stage}/{space}/acc", self.accuracies[stage][space]['token'], 
+                     on_step=False, on_epoch=True, prog_bar=True, 
+                     metric_attribute=f"accuracies_{stage}_{space}_token")
+
+        return loss
+
+    def on_train_start(self) -> None:
+        """Lightning hook that is called when training begins."""
+        # by default lightning executes validation step sanity checks before training starts,
+        # so it's worth to make sure validation metrics don't store results from these checks
+        for split in self.accuracies.keys():
+            for space in self.accuracies[split].keys():
+                for medium in self.accuracies[split][space].keys():
+                    self.accuracies[split][space][medium].reset()
+                    self.losses[split][space][medium].reset()
+        self.val_acc_best.reset()
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -217,18 +252,7 @@ class SigmaeLitModuleBase(LightningModule):
         :param batch_idx: The index of the current batch.
         :return: A tensor of losses between model predictions and targets.
         """
-        loss, preds, targets = self.model_step(batch)
-
-        # update and log metrics
-        self.log("train/x_data_available", float(data_type[0]), batch_size=self.batch_size, sync_dist=True)
-        self.log("train/z_data_available", float(data_type[1]), batch_size=self.batch_size, sync_dist=True)
-        self.log('global_step', float(self.global_step), batch_size=self.batch_size, sync_dist=True)
-
-        self.train_loss(loss)
-        self.train_acc(preds, targets)
-        self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train/acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
-
+        loss = self.model_step(batch, stage='train')
         # return loss or backpropagation will fail
         return loss
 
@@ -243,15 +267,7 @@ class SigmaeLitModuleBase(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, preds, targets = self.model_step(batch)
-
-        # update and log metrics
-        for space in ['xz', 'zx', 'xzx', 'zxx']:
-            for medium in ['token', 'sequence']:
-                self.accuracies[split][space][medium].update(preds, targets)
-                self.losses[split][space][medium].update(loss)
-                self.log(f"val/{space}/{medium}/loss", self.losses[split][space][medium], on_step=False, on_epoch=True, prog_bar=True)
-                self.log(f"val/{space}/{medium}/acc", self.accuracies[split][space][medium], on_step=False, on_epoch=True, prog_bar=True)
+        loss = self.model_step(batch, stage='val')
 
         # self.val_loss(loss)
         # self.val_acc(preds, targets)
@@ -260,7 +276,8 @@ class SigmaeLitModuleBase(LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         "Lightning hook that is called when a validation epoch ends."
-        acc = self.val_acc.compute()  # get current val acc
+
+        acc = self.accuracies['val']['xz']['token'].compute()
         self.val_acc_best(acc)  # update best so far val acc
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # otherwise metric would be reset by lightning after each epoch
@@ -273,13 +290,13 @@ class SigmaeLitModuleBase(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, preds, targets = self.model_step(batch)
+        loss = self.model_step(batch, stage='test')
 
-        # update and log metrics
-        self.test_loss(loss)
-        self.test_acc(preds, targets)
-        self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test/acc", self.test_acc, on_step=False, on_epoch=True, prog_bar=True)
+        # # update and log metrics
+        # self.test_loss(loss)
+        # self.test_acc(preds, targets)
+        # self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
+        # self.log("test/acc", self.test_acc, on_step=False, on_epoch=True, prog_bar=True)
 
     def on_test_epoch_end(self) -> None:
         """Lightning hook that is called when a test epoch ends."""

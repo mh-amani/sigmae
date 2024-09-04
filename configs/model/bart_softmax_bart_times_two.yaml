@@ -13,10 +13,24 @@ models_config:
       max_lengths:
         input: ${model.model_params.max_x_length}
         output: ${model.model_params.max_z_length}
-  
   sequence_model_zx: 
     config:
       max_lengths:
         input: ${model.model_params.max_z_length}
         output: ${model.model_params.max_x_length}
 
+  discretizer_x:
+    config:
+      dimensions:
+        vocab_size: ${model.model_params.input_vocab_size}
+        encoder_embedding_dim: ${model.model_params.d_model}
+        decoder_embedding_dim: ${model.model_params.d_model}
+        unembedding_dim: ${model.model_params.input_vocab_size}
+
+  discretizer_z:
+    config:
+      dimensions:
+        vocab_size: ${model.model_params.output_vocab_size}
+        encoder_embedding_dim: ${model.model_params.d_model}
+        decoder_embedding_dim: ${model.model_params.d_model}
+        unembedding_dim: ${model.model_params.output_vocab_size}

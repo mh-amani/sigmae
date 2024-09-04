@@ -107,12 +107,12 @@ class AbstractDataset(Dataset):
 
     def assign_data_type(self):
         dataset_length = len(self.dataset)
-        sup_len_xz = int(self.supervision_ratio[0] * dataset_length)
-        sup_len_x = int((1 - self.supervision_ratio[0]) * (1 - self.supervision_ratio[1]) * dataset_length)
+        self.sup_len_xz = int(self.supervision_ratio[0] * dataset_length)
+        self.sup_len_x = int((1 - self.supervision_ratio[0]) * (1 - self.supervision_ratio[1]) * dataset_length)
 
         self.data_type = np.ones((dataset_length, 2), dtype=np.bool_)
-        self.data_type[sup_len_xz:sup_len_xz + sup_len_x] = np.array([1, 0], dtype=np.bool_)
-        self.data_type[sup_len_xz + sup_len_x:] = np.array([0, 1], dtype=np.bool_)
+        self.data_type[self.sup_len_xz:self.sup_len_xz + self.sup_len_x] = np.array([1, 0], dtype=np.bool_)
+        self.data_type[self.sup_len_xz + self.sup_len_x:] = np.array([0, 1], dtype=np.bool_)
 
     def __getitem__(self, idx):
         item = self.dataset[idx]

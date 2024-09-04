@@ -9,8 +9,9 @@ defaults:
 _target_: src.models.sigmae_lit_module_base.SigmaeLitModuleBase
 
 model_params:
-  max_x_length: 100
-  max_z_length: 100
+  max_x_length: ???
+  max_z_length: ???
+  d_model: ???
   compile: false # compile model for faster training with pytorch 2.0
 
 optimizer:

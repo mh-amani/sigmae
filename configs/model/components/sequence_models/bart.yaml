@@ -5,7 +5,7 @@ model:
   _target_: 'transformers.BartForConditionalGeneration'
   config: 
     _target_: 'transformers.BartConfig'
-    d_model: 512
+    d_model: ${model.model_params.d_model}
     encoder_layers: 4
     decoder_layers: 4
     vocab_size: 23

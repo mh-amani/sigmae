@@ -11,9 +11,9 @@ import math
 
 class RandomSupervisionSampler(Sampler):
     def __init__(self, dataset: Dataset, data_type_sampling_probability: List[float], 
-                 batch_size: int = 32, seed: int = 42) -> None:
+                 batch_size: int = 32, seed=42) -> None:
         self.dataset = dataset
-        self.data_type_sampling_probability = torch.tensor(data_type_sampling_probability).float()
+        self.data_type_sampling_probability = data_type_sampling_probability
         self.batch_size = batch_size
         self.seed = seed
 
@@ -60,11 +60,11 @@ class RandomSupervisionSampler(Sampler):
 class RandomSupervisionSamplerDDP(DistributedSampler):
     def __init__(self, dataset: Dataset, data_type_sampling_probability: List[float],
                  num_replicas: Optional[int] = None, rank: Optional[int] = None,
-                 shuffle: bool = True, seed: int = 0, drop_last: bool = False,
+                 shuffle: bool = True, seed=42, drop_last: bool = False,
                  batch_size: int = 32) -> None:
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
         
-        self.data_type_sampling_probability = torch.tensor(data_type_sampling_probability).float()
+        self.data_type_sampling_probability = data_type_sampling_probability
         self.batch_size = batch_size
         
         self.replica_size = self.batch_size * self.num_replicas
