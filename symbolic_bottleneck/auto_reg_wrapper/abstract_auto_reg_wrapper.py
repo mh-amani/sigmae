@@ -1,7 +1,7 @@
 from torch.nn import Module
 import inspect
 from typing import Any, Dict
-
+from abc import abstractmethod
 class AbstractAutoRegWrapper(Module):
     
     REQUIRED_CONFIG_KEYS = ["max_lengths", "device"]
@@ -71,12 +71,15 @@ class AbstractAutoRegWrapper(Module):
                 inputs[name] = kwargs[name]
         return inputs
     
-    def prepare_inputs_for_forward(self, **kwargs) -> Dict[str, Any]: 
+    @abstractmethod
+    def prepare_inputs(self, **kwargs) -> Dict[str, Any]: 
         raise NotImplementedError
     
+    @abstractmethod
     def teacher_forced_model_forward(self, **kwargs):
         raise NotImplementedError
     
+    @abstractmethod
     def return_output_dict(self, outputs) -> Dict[str, Any]:
         raise NotImplementedError
     
@@ -85,7 +88,7 @@ class AbstractAutoRegWrapper(Module):
         if max_output_length is None:
             max_output_length = self.max_lengths['output']
         
-        inputs_for_forward = self.prepare_inputs_for_forward(**kwargs)
+        inputs_for_forward = self.prepare_inputs(**kwargs)
         
         if "max_output_length" not in inputs_for_forward:
             inputs_for_forward["max_output_length"] = max_output_length
@@ -93,10 +96,10 @@ class AbstractAutoRegWrapper(Module):
         if not teacher_force_output:
             inputs = self._fetch_kwargs_for_fn(
                 self.sequential_forward,
-                exclude= [ "model" , "discretizer"],
+                exclude= [],
                 **inputs_for_forward
             )
-            outputs = self.sequential_forward(self.model, self.output_discretizer, **inputs) 
+            outputs = self.sequential_forward(**inputs) 
         
         else:
             inputs = self._fetch_kwargs_for_fn(self.teacher_forced_model_forward, **inputs_for_forward)
@@ -104,5 +107,6 @@ class AbstractAutoRegWrapper(Module):
         
         return self.return_output_dict(outputs)
 
-    def sequential_forward(self, model, discretizer, *args, **kwargs):
+    @abstractmethod
+    def sequential_forward(self, *args, **kwargs):
         raise NotImplementedError

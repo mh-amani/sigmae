@@ -1,10 +1,10 @@
-from .abstract_discrete_layer import AbstractDiscreteLayer
+from .abstract_bottleneck import AbstractBottleneck
 import torch
 from torch.nn.functional import gumbel_softmax
 import math
 
 
-class GumbelDiscreteLayer(AbstractDiscreteLayer):
+class GumbelDiscreteLayer(AbstractBottleneck):
     def __init__(self, dims, **kwargs) -> None:
         super().__init__(dims, **kwargs)
         self.hard = kwargs['hard'] # if True, use argmax in forward pass, else use gumbel softmax. the backwardpass is the same in both cases

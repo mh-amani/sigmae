@@ -4,7 +4,6 @@ import numpy as np
 from torch.nn import ModuleDict, Module
 from symbolic_bottleneck.auto_reg_wrapper import AbstractAutoRegWrapper
 
-
 class AutoRegWrapper(AbstractAutoRegWrapper):
     """
     a wrapper connecting two sequence models with discrete bottleneck layers
@@ -22,6 +21,8 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         "output_prepending_ids",
     ]
     
+    NO_INPUT_ATTENTION_MASK: bool = False
+    
     def __init__(
         self,
         vector_model,
@@ -36,7 +37,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             output_discretizer=output_discretizer,
             config=config,
         )
-
+        
         self.control_token_ids = self.config['control_token_ids']
         
         self.soft_average = self.config['soft_average']
@@ -63,7 +64,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             self.output_prepending_embeds_enc = self.output_discretizer.encoder_embedding_from_id(torch.from_numpy(np.array(self.output_prepending_ids)).to(self.device)).clone().detach().cpu().numpy()
             self.output_prepending_embeds_dec = self.output_discretizer.decoder_embedding_from_id(torch.from_numpy(np.array(self.output_prepending_ids)).to(self.device)).clone().detach().cpu().numpy()
 
-    def prepare_inputs_for_forward(
+    def prepare_inputs(
         self,
         input_ids=None,
         input_attention_mask=None,
@@ -75,7 +76,8 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
     ):
                 
         assert (input_ids is not None) != (input_embeds_enc is not None), "Either input_ids or input_embeds should be provided"
-        assert (input_embeds_enc is not None and input_attention_mask is not None) or (input_embeds_enc is None and input_attention_mask is None), "input_embeds and input_attention_mask should be provided together or not at all"
+        if not self.NO_INPUT_ATTENTION_MASK :
+            assert (input_embeds_enc is not None and input_attention_mask is not None) or (input_embeds_enc is None and input_attention_mask is None), "input_embeds and input_attention_mask should be provided together or not at all. HINT: if you're model does not accept input_attention_mask, set the class variable NO_INPUT_ATTENTION_MASK to True"
         assert (output_ids is None)  or (output_embeds_enc is None), "Either output_ids or output_embeds or neither should be provided, but not both"
         assert (output_embeds_enc is not None and output_embeds_dec is not None and output_attention_mask is not None) or (output_embeds_enc is None and output_embeds_dec is None and output_attention_mask is None), "output_embeds and output_attention_mask should be provided together or not at all"
 
@@ -108,10 +110,22 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             "output_attention_mask": output_attention_mask
         }
         
+    def prepare_args_for_forward(
+        self,
+        input_embeds,
+        input_attention_mask,
+        output_embeds,
+        output_attention_mask,
+    ):
+        return {
+            "inputs_embeds": input_embeds,
+            "attention_mask": input_attention_mask,
+            "decoder_inputs_embeds": output_embeds,
+            "decoder_attention_mask": output_attention_mask,            
+        }
+        
     def _one_step_sequential_forward(
         self,
-        model,
-        discretizer,
         input_embeds,
         input_attention_mask, 
         output_embeds,
@@ -122,10 +136,19 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         eos_token_id = self.control_token_ids['output_eos_token_id']
         # If you're using cached key values or encoder outputs or what not, you should pass them here. and you should check
         # the model source code to see if the gradients backpropagate through these values from next step or not.
-        output = model(inputs_embeds=input_embeds, attention_mask=input_attention_mask,
-                        decoder_inputs_embeds=output_embeds, decoder_attention_mask=output_attention_mask,
-                        output_hidden_states=True, output_attentions=True, **last_step_states, use_cache=self.config['use_last_step_states'])
+        args_for_seq_forward = self.prepare_args_for_forward(
+            input_embeds=input_embeds,
+            input_attention_mask=input_attention_mask,
+            output_embeds=output_embeds,
+            output_attention_mask=output_attention_mask,
+        )
         
+        args_for_seq_forward = {**last_step_states, **args_for_seq_forward}
+        if "use_cache" not in args_for_seq_forward:
+            args_for_seq_forward['use_cache'] = self.config['use_last_step_states']
+        
+        output = self.model(output_hidden_states = True, output_attentions= True, return_dict = True , **args_for_seq_forward)
+ 
         # output_embed = output['decoder_hidden_states'][-1]
         output_embed = output[self.hidden_state_key][-1][:, -1:, :] # does the same thing as above size: (batch_size, 1, hidden_size)
         # output of the encoder to be used in generation, I don't get why the key values are needed though, only query values are useful
@@ -135,20 +158,18 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         hidden_state = output.encoder_hidden_states
         encoder_attentions = output.encoder_attentions
 
-        discretizer_output = discretizer(output_embed, supervision=False, average_probs=self.soft_average['word_embeds_with_scores_forward'])
-        # discretizer_output.keys(): idx, score, logits, quantized_vector, quantization_loss
+        discretizer_output = self.output_discretizer(output_embed, supervision=False, average_probs=self.soft_average['word_embeds_with_scores_forward'])
         
         current_eos_flag = (torch.eq(discretizer_output['id'][:, -1], eos_token_id))
 
         p_eos = discretizer_output['score'][:, :, eos_token_id]
 
-        # idx, score, logits, quantized_vector, quantization_loss, current_eos_flag, p_eos, past_key_values, encoder_last_hidden_state, hidden_state, encoder_attentions
         return({
             'id': discretizer_output['id'],
             'score': discretizer_output['score'],
             'logit': discretizer_output['logit'], 
-            'quantized_vector_encoder': discretizer_output['quantized_vector_encoder'],
-            'quantized_vector_decoder': discretizer_output['quantized_vector_decoder'], 
+            'vector_encoder': discretizer_output['vector_encoder'],
+            'vector_decoder': discretizer_output['vector_decoder'], 
             'quantization_loss': discretizer_output['quantization_loss'],
             'eos_flag': current_eos_flag,
             'p_eos': p_eos, 
@@ -160,8 +181,6 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         
     def sequential_forward(
         self,
-        model,
-        discretizer,
         input_embeds,
         input_attention_mask, 
         output_embeds_enc,
@@ -172,14 +191,14 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
 
         # initialize tensors
         quantization_loss = 0
-        onehot_score_pad = torch.nn.functional.one_hot(torch.tensor(self.control_token_ids['output_pad_token_id']), num_classes=discretizer.vocab_size).to(output_embeds_enc.device).float()
+        onehot_score_pad = torch.nn.functional.one_hot(torch.tensor(self.control_token_ids['output_pad_token_id']), num_classes=self.output_discretizer.vocab_size).to(output_embeds_enc.device).float()
         pad_embed_enc = self.output_discretizer.encoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(output_embeds_enc.device))
         pad_embed_dec = self.output_discretizer.decoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(output_embeds_enc.device))
         preprend_length = output_embeds_enc.shape[1] 
        
         ids = torch.ones(input_embeds.shape[0], max_output_length-preprend_length).to(input_embeds).int() * self.control_token_ids['output_pad_token_id']
-        scores = torch.zeros(input_embeds.shape[0], max_output_length-preprend_length, discretizer.vocab_size).to(input_embeds) * onehot_score_pad
-        logits = torch.zeros(input_embeds.shape[0], max_output_length-preprend_length, discretizer.vocab_size).to(input_embeds)
+        scores = torch.zeros(input_embeds.shape[0], max_output_length-preprend_length, self.output_discretizer.vocab_size).to(input_embeds) * onehot_score_pad
+        logits = torch.zeros(input_embeds.shape[0], max_output_length-preprend_length, self.output_discretizer.vocab_size).to(input_embeds)
         # scores = torch.empty(input_embeds.shape[0], max_output_length-preprend_length, discretizer.vocab_size).to(input_embeds).fill_(0.0)
         logit_list = []
         scores_list = [] # this is only for visualizing the gradients. cause score matrix is a clone of scores, so gradaient propogation throught time doesn't showup in it. it is visible here.
@@ -207,10 +226,11 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             if self.config['use_past_key_values'] and step > 0:
                 last_step_states['past_key_values'] = current_output['past_key_values'] # used to be torch.logical_not(eos_flag) for gpt2-gpt2,
             
+            
             current_output = \
-            self._one_step_sequential_forward(model, discretizer, input_embeds, input_attention_mask,
-                                                    output_embeds_decs[:, :step + preprend_length], output_attention_masks[:, :step + preprend_length], 
-                                                    last_step_states, )
+                self._one_step_sequential_forward(input_embeds, input_attention_mask,
+                                                        output_embeds_decs[:, :step + preprend_length], output_attention_masks[:, :step + preprend_length], 
+                                                        last_step_states, )
 
             ids[:, step] = current_output['id'].reshape(-1)
             scores_list.append(current_output['score'])
@@ -222,8 +242,8 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             eos_flags = torch.logical_or(eos_flags, current_output['eos_flag'].reshape(-1, 1))
             quantization_loss += (current_output['quantization_loss'] * torch.logical_not(eos_flags).float())
             quantization_loss = quantization_loss * (current_output['quantization_loss'] * torch.logical_not(eos_flags))
-            output_embeds_encs = torch.cat((output_embeds_encs, current_output['quantized_vector_encoder']), dim=1)
-            output_embeds_decs = torch.cat((output_embeds_decs, current_output['quantized_vector_decoder']), dim=1)
+            output_embeds_encs = torch.cat((output_embeds_encs, current_output['vector_encoder']), dim=1)
+            output_embeds_decs = torch.cat((output_embeds_decs, current_output['vector_decoder']), dim=1)
             step = step + 1
 
         # cut the tensors to the actual length, remove 0s and 1s.
@@ -257,8 +277,8 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             'score': scores,
             'score_list': scores_list,
             'logit': logits,
-            'quantized_vector_encoder': output_embeds_encs,
-            'quantized_vector_decoder': output_embeds_decs,
+            'vector_encoder': output_embeds_encs,
+            'vector_decoder': output_embeds_decs,
             'quantization_loss': quantization_loss,
             'output_attention_mask': output_attention_masks,
             'eos_flag': eos_flags,
@@ -271,20 +291,21 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         input_attention_mask,
         output_embeds_dec,
         output_attention_mask,
-        output_ids,
-        output_hidden_states=True,
-        output_attentions=True,
-        return_dict=True,
+        output_ids
     ):
         
+        args_for_seq_forward = self.prepare_args_for_forward(
+            input_embeds=input_embeds,
+            input_attention_mask=input_attention_mask,
+            output_embeds=output_embeds_dec,
+            output_attention_mask=output_attention_mask,
+        )
+        
         model_outputs = self.model.forward(
-            inputs_embeds=input_embeds,
-            attention_mask=input_attention_mask,
-            decoder_inputs_embeds=output_embeds_dec,
-            decoder_attention_mask=output_attention_mask,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
+            output_hidden_states=True,
+            output_attentions=True,
             return_dict=True,
+            **args_for_seq_forward
         )
         
         outputs = self.output_discretizer(
@@ -307,8 +328,8 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             'score': outputs['score'],
             'score_list': outputs['score_list'],
             'logit': outputs['logit'],
-            'quantized_vector_encoder': outputs['quantized_vector_encoder'],
-            'quantized_vector_decoder': outputs['quantized_vector_decoder'],
+            'vector_encoder': outputs['vector_encoder'],
+            'vector_decoder': outputs['vector_decoder'],
             'output_attention_mask': outputs['output_attention_mask'],
             'eos_flag': outputs['eos_flag'],
             'p_not_eos': outputs['p_not_eos'],

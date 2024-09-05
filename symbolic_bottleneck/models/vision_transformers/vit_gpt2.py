@@ -25,11 +25,9 @@ discretizer_dec_config = {
         }
     }
 
-disctetizer_enc_config = None
 
 
-from transformers import GPT2Model
-def UnWrappedVITGPT2(config_vit_gpt2, disctetizer_enc_config ,discretizer_dec_config):
+def UnWrappedVITGPT2(config_vit_gpt2 ,discretizer_dec_config):
     
     model = instantiate_from_config(config_vit_gpt2)
     
