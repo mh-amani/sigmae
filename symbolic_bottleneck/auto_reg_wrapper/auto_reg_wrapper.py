@@ -42,8 +42,6 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         
         self.soft_average = self.config['soft_average']
 
-        self.hidden_state_key = self.config.get('hidden_state_key', 'decoder_hidden_states')
-
         #TODO: This can probably be removed
         # self.output_discretizer.encoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(self.output_discretizer.encoder_embedding.weight.device))
         # self.output_discretizer.decoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(self.output_discretizer.encoder_embedding.weight.device))
@@ -110,7 +108,26 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             "output_attention_mask": output_attention_mask
         }
         
-    def prepare_args_for_forward(
+    def discretize_output(self, hidden_state, teacher_forced = False, output_ids=None, output_attention_mask=None):
+        if teacher_forced:
+            discretized_output = self.output_discretizer(
+                hidden_state,
+                supervision=True,
+                target_ids=output_ids,
+                target_attention_mask=output_attention_mask,
+                average_probs=self.soft_average['word_embeds_with_scores_forward']
+            )
+            
+        else:
+            discretized_output = self.output_discretizer(
+                hidden_state,
+                supervision=False,
+                average_probs=self.soft_average['word_embeds_with_scores_forward']
+            )
+        
+        return discretized_output
+        
+    def prepare_args_for_model_forward(
         self,
         input_embeds,
         input_attention_mask,
@@ -124,77 +141,61 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             "decoder_attention_mask": output_attention_mask,            
         }
         
-    def _one_step_sequential_forward(
+    def teacher_forced_model_forward(
         self,
         input_embeds,
-        input_attention_mask, 
-        output_embeds,
-        output_attention_mask,
-        last_step_states={},
-    ):
-        
-        eos_token_id = self.control_token_ids['output_eos_token_id']
-        # If you're using cached key values or encoder outputs or what not, you should pass them here. and you should check
-        # the model source code to see if the gradients backpropagate through these values from next step or not.
-        args_for_seq_forward = self.prepare_args_for_forward(
-            input_embeds=input_embeds,
-            input_attention_mask=input_attention_mask,
-            output_embeds=output_embeds,
-            output_attention_mask=output_attention_mask,
-        )
-        
-        args_for_seq_forward = {**last_step_states, **args_for_seq_forward}
-        if "use_cache" not in args_for_seq_forward:
-            args_for_seq_forward['use_cache'] = self.config['use_last_step_states']
-        
-        output = self.model(output_hidden_states = True, output_attentions= True, return_dict = True , **args_for_seq_forward)
- 
-        # output_embed = output['decoder_hidden_states'][-1]
-        output_embed = output[self.hidden_state_key][-1][:, -1:, :] # does the same thing as above size: (batch_size, 1, hidden_size)
-        # output of the encoder to be used in generation, I don't get why the key values are needed though, only query values are useful
-        # maybe using this is blocking the gradient flow, I should check this
-        encoder_last_hidden_state = output.encoder_last_hidden_state
-        past_key_values = output.past_key_values
-        hidden_state = output.encoder_hidden_states
-        encoder_attentions = output.encoder_attentions
-
-        discretizer_output = self.output_discretizer(output_embed, supervision=False, average_probs=self.soft_average['word_embeds_with_scores_forward'])
-        
-        current_eos_flag = (torch.eq(discretizer_output['id'][:, -1], eos_token_id))
-
-        p_eos = discretizer_output['score'][:, :, eos_token_id]
-
-        return({
-            'id': discretizer_output['id'],
-            'score': discretizer_output['score'],
-            'logit': discretizer_output['logit'], 
-            'vector_encoder': discretizer_output['vector_encoder'],
-            'vector_decoder': discretizer_output['vector_decoder'], 
-            'quantization_loss': discretizer_output['quantization_loss'],
-            'eos_flag': current_eos_flag,
-            'p_eos': p_eos, 
-            'past_key_values': past_key_values,
-            'encoder_last_hidden_state': encoder_last_hidden_state, 
-            'hidden_state': hidden_state,
-            'encoder_attentions': encoder_attentions
-        })
-        
-    def sequential_forward(
-        self,
-        input_embeds,
-        input_attention_mask, 
-        output_embeds_enc,
+        input_attention_mask,
         output_embeds_dec,
         output_attention_mask,
-        max_output_length
+        output_ids
     ):
+         
+        outputs = super().teacher_forced_model_forward(
+            input_embeds = input_embeds,
+            input_attention_mask = input_attention_mask,
+            output_embeds_dec = output_embeds_dec,
+            output_attention_mask = output_attention_mask,
+            output_ids = output_ids
+        )
 
+        outputs['score_list'] = []
+        outputs['eos_flag'] = torch.any(torch.eq(outputs['id'], self.control_token_ids['output_eos_token_id']), dim=1).reshape(-1, 1)
+        outputs['p_not_eos'] = 1 - outputs['score'][:, :, self.control_token_ids['output_eos_token_id']]
+        outputs['output_attention_mask'] = output_attention_mask
+        
+        return outputs    
+        
+        
+    def return_output_dict(self, outputs) -> Dict[str, Any]:
+        return {
+            'id': outputs['id'],
+            'score': outputs['score'],
+            'score_list': outputs['score_list'],
+            'logit': outputs['logit'],
+            'vector_encoder': outputs['vector_encoder'],
+            'vector_decoder': outputs['vector_decoder'],
+            'output_attention_mask': outputs['output_attention_mask'],
+            'eos_flag': outputs['eos_flag'],
+            'p_not_eos': outputs['p_not_eos'],
+            'quantization_loss': outputs['quantization_loss']
+        }
+        
+    def prepare_seq_forward_params(
+        self,
+        input_embeds = None,
+        input_attention_mask = None, 
+        output_embeds_enc = None,
+        output_embeds_dec = None,
+        output_attention_mask = None,
+        max_output_length = None,
+        preprend_length = None,
+    ) -> Dict[str, Any]:
+        
         # initialize tensors
         quantization_loss = 0
         onehot_score_pad = torch.nn.functional.one_hot(torch.tensor(self.control_token_ids['output_pad_token_id']), num_classes=self.output_discretizer.vocab_size).to(output_embeds_enc.device).float()
         pad_embed_enc = self.output_discretizer.encoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(output_embeds_enc.device))
         pad_embed_dec = self.output_discretizer.decoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(output_embeds_enc.device))
-        preprend_length = output_embeds_enc.shape[1] 
        
         ids = torch.ones(input_embeds.shape[0], max_output_length-preprend_length).to(input_embeds).int() * self.control_token_ids['output_pad_token_id']
         scores = torch.zeros(input_embeds.shape[0], max_output_length-preprend_length, self.output_discretizer.vocab_size).to(input_embeds) * onehot_score_pad
@@ -213,39 +214,151 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         # output_embeds_encs.requires_grad = True
         # output_embeds_decs.requires_grad = True
         # output_attention_masks.requires_grad = True
+        
+        return {
+            "quantization_loss": quantization_loss,
+            "onehot_score_pad": onehot_score_pad,
+            "pad_embed_enc": pad_embed_enc,
+            "pad_embed_dec": pad_embed_dec,
+            "ids": ids,
+            "scores": scores,
+            "logits": logits,
+            "logit_list": logit_list,
+            "scores_list": scores_list,
+            "p_not_eoss": p_not_eoss,
+            "eos_flags": eos_flags,
+            "output_embeds_encs": output_embeds_encs,
+            "output_embeds_decs": output_embeds_decs,
+            "output_attention_masks": output_attention_masks,
+            "input_embeds": input_embeds,
+            "input_attention_mask": input_attention_mask,
+            "output_attention_mask": output_attention_mask,
+        }
+        
+    def should_continue_forward(self, eos_flags):
+        return not torch.all(eos_flags)
+    
+    def prepare_one_step_seq_forward_params(
+        self,
+        step,
+        preprend_length,
+        input_embeds,
+        input_attention_mask,
+        output_embeds_decs,
+        output_attention_masks,
+        **kwargs
+    ):
+    
+        return {
+            "input_embeds": input_embeds,
+            "input_attention_mask": input_attention_mask,
+            "output_embeds": output_embeds_decs[:, :step + preprend_length],
+            "output_attention_mask": output_attention_masks[:, :step + preprend_length],
+        }
+        
+    def one_step_sequential_forward(
+        self,
+        input_embeds,
+        input_attention_mask, 
+        output_embeds,
+        output_attention_mask,
+        last_step_states={},
+    ):
+        
+        eos_token_id = self.control_token_ids['output_eos_token_id']
+       
+        seq_forward_output = super().one_step_sequential_forward(
+            input_embeds = input_embeds,
+            input_attention_mask = input_attention_mask,
+            output_embeds = output_embeds,
+            output_attention_mask = output_attention_mask,
+            last_step_states = last_step_states,
+        )
+               
+        current_eos_flag = (torch.eq(seq_forward_output['id'][:, -1], eos_token_id))
 
-        step=0
-        while step + preprend_length < max_output_length and not torch.all(eos_flags):
+        p_eos = seq_forward_output['score'][:, :, eos_token_id]
 
-            if self.config['use_last_step_states'] and step > 0:
-                last_step_states={'encoder_outputs':(current_output['encoder_last_hidden_state'], current_output['hidden_state'], 
-                                                    current_output['encoder_attentions'])}
-            else:
-                last_step_states = {}
-            # use the last hidden state of the encoder as the input to the decoder
-            if self.config['use_past_key_values'] and step > 0:
-                last_step_states['past_key_values'] = current_output['past_key_values'] # used to be torch.logical_not(eos_flag) for gpt2-gpt2,
-            
-            
-            current_output = \
-                self._one_step_sequential_forward(input_embeds, input_attention_mask,
-                                                        output_embeds_decs[:, :step + preprend_length], output_attention_masks[:, :step + preprend_length], 
-                                                        last_step_states, )
-
-            ids[:, step] = current_output['id'].reshape(-1)
-            scores_list.append(current_output['score'])
-            scores[:, step] = current_output['score'][:, 0]
-            logits[:, step] = current_output['logit'][:, 0]
-            logit_list.append(current_output['logit'])
-            p_not_eoss.append( (1 - current_output['p_eos']) * p_not_eoss[step])
-            output_attention_masks = torch.cat((output_attention_masks, self.attention_mask(eos_flags, p_not_eoss[step])[:, 0].reshape(-1, 1)), dim=1)
-            eos_flags = torch.logical_or(eos_flags, current_output['eos_flag'].reshape(-1, 1))
-            quantization_loss += (current_output['quantization_loss'] * torch.logical_not(eos_flags).float())
-            quantization_loss = quantization_loss * (current_output['quantization_loss'] * torch.logical_not(eos_flags))
-            output_embeds_encs = torch.cat((output_embeds_encs, current_output['vector_encoder']), dim=1)
-            output_embeds_decs = torch.cat((output_embeds_decs, current_output['vector_decoder']), dim=1)
-            step = step + 1
-
+        return({
+            'id': seq_forward_output['id'],
+            'score': seq_forward_output['score'],
+            'logit': seq_forward_output['logit'], 
+            'vector_encoder': seq_forward_output['vector_encoder'],
+            'vector_decoder': seq_forward_output['vector_decoder'], 
+            'quantization_loss': seq_forward_output['quantization_loss'],
+            'eos_flag': current_eos_flag,
+            'p_eos': p_eos, 
+            'past_key_values': seq_forward_output["past_key_values"],
+            'encoder_last_hidden_state': seq_forward_output["encoder_last_hidden_state"], 
+            'hidden_state': seq_forward_output["hidden_state"],
+            'encoder_attentions': seq_forward_output["encoder_attentions"]
+        })
+        
+    def post_one_step_seq_forward(
+        self,
+        current_output,
+        step,
+        ids,
+        scores_list,
+        scores,
+        logits,
+        logit_list,
+        p_not_eoss,
+        output_attention_masks,
+        eos_flags,
+        quantization_loss,
+        output_embeds_encs,
+        output_embeds_decs,
+        **kwargs,
+    ):
+        
+        ids[:, step] = current_output['id'].reshape(-1)
+        scores_list.append(current_output['score'])
+        scores[:, step] = current_output['score'][:, 0]
+        logits[:, step] = current_output['logit'][:, 0]
+        logit_list.append(current_output['logit'])
+        p_not_eoss.append( (1 - current_output['p_eos']) * p_not_eoss[step])
+        output_attention_masks = torch.cat((output_attention_masks, self.attention_mask(eos_flags, p_not_eoss[step])[:, 0].reshape(-1, 1)), dim=1)
+        eos_flags = torch.logical_or(eos_flags, current_output['eos_flag'].reshape(-1, 1))
+        quantization_loss += (current_output['quantization_loss'] * torch.logical_not(eos_flags).float())
+        quantization_loss = quantization_loss * (current_output['quantization_loss'] * torch.logical_not(eos_flags))
+        output_embeds_encs = torch.cat((output_embeds_encs, current_output['vector_encoder']), dim=1)
+        output_embeds_decs = torch.cat((output_embeds_decs, current_output['vector_decoder']), dim=1)
+        
+        return {
+            "ids": ids,
+            "scores_list": scores_list,
+            "scores": scores,
+            "logits": logits,
+            "logit_list": logit_list,
+            "p_not_eoss": p_not_eoss,
+            "output_attention_masks": output_attention_masks,
+            "eos_flags": eos_flags,
+            "quantization_loss": quantization_loss,
+            "output_embeds_encs": output_embeds_encs,
+            "output_embeds_decs": output_embeds_decs,
+            **kwargs
+        }
+    
+    def return_seq_forward_output_dict(
+        self,
+        step,
+        preprend_length,
+        ids,
+        scores,
+        logits,
+        p_not_eoss,
+        output_embeds_encs,
+        output_embeds_decs,
+        output_attention_masks,
+        onehot_score_pad,
+        pad_embed_enc,
+        pad_embed_dec,
+        scores_list,
+        eos_flags,
+        quantization_loss,
+        **kwargs
+    ):
         # cut the tensors to the actual length, remove 0s and 1s.
         ids = ids[:, :step]
         scores = scores[:, :step]
@@ -284,59 +397,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             'eos_flag': eos_flags,
             'p_not_eos': p_not_eoss
         }
-        
-    def teacher_forced_model_forward(
-        self,
-        input_embeds,
-        input_attention_mask,
-        output_embeds_dec,
-        output_attention_mask,
-        output_ids
-    ):
-        
-        args_for_seq_forward = self.prepare_args_for_forward(
-            input_embeds=input_embeds,
-            input_attention_mask=input_attention_mask,
-            output_embeds=output_embeds_dec,
-            output_attention_mask=output_attention_mask,
-        )
-        
-        model_outputs = self.model.forward(
-            output_hidden_states=True,
-            output_attentions=True,
-            return_dict=True,
-            **args_for_seq_forward
-        )
-        
-        outputs = self.output_discretizer(
-            model_outputs[self.hidden_state_key][-1],
-            supervision=True,
-            target_ids=output_ids,
-            target_attention_mask=output_attention_mask,
-            average_probs=self.soft_average['word_embeds_with_scores_forward']
-        )
-
-        outputs['score_list'] = []
-        outputs['eos_flag'] = torch.any(torch.eq(outputs['id'], self.control_token_ids['output_eos_token_id']), dim=1).reshape(-1, 1)
-        outputs['p_not_eos'] = 1 - outputs['score'][:, :, self.control_token_ids['output_eos_token_id']]
-        outputs['output_attention_mask'] = output_attention_mask
-        return outputs
     
-    def return_output_dict(self, outputs) -> Dict[str, Any]:
-        return {
-            'id': outputs['id'],
-            'score': outputs['score'],
-            'score_list': outputs['score_list'],
-            'logit': outputs['logit'],
-            'vector_encoder': outputs['vector_encoder'],
-            'vector_decoder': outputs['vector_decoder'],
-            'output_attention_mask': outputs['output_attention_mask'],
-            'eos_flag': outputs['eos_flag'],
-            'p_not_eos': outputs['p_not_eos'],
-            'quantization_loss': outputs['quantization_loss']
-        }
-
-
     def attention_mask(self, eos_flags, p_not_eos):
         true_attention_mask = torch.logical_not(eos_flags)
         if self.config['soft_average']['p_eos_forward']:

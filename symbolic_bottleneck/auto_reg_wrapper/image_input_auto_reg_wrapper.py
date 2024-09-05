@@ -42,7 +42,7 @@ class ImageInputAutoRegWrapper(AutoRegWrapper):
         return super().prepare_inputs(**args_for_super)
         
     
-    def prepare_args_for_forward(
+    def prepare_args_for_model_forward(
         self,
         input_embeds,
         input_attention_mask,
