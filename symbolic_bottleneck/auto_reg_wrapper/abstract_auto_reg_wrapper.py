@@ -4,7 +4,12 @@ from typing import Any, Dict
 from abc import abstractmethod
 class AbstractAutoRegWrapper(Module):
     
-    REQUIRED_CONFIG_KEYS = ["max_lengths", "device"]
+    REQUIRED_CONFIG_KEYS = [
+        "max_lengths",
+        "device",
+        "use_last_step_states",
+        "use_past_key_values",
+    ]
     
     
     def __init__(

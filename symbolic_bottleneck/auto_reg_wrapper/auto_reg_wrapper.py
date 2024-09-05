@@ -16,8 +16,6 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         "control_token_ids.output_eos_token_id",
         "control_token_ids.output_eos_token_id",
         "soft_average",
-        "use_last_step_states",
-        "use_past_key_values",
         "output_prepending_ids",
     ]
     
