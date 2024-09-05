@@ -111,7 +111,7 @@ def AutoRegWrappedBartTest():
         }
     
     # autoreg-wrapped models
-    im2text_autoreg_wrapped_model = ImageInputAutoRegWrapper(vector_model, discretizer, auto_reg_wrapper_config)
+    im2text_autoreg_wrapped_model = ImageInputAutoRegWrapper(vector_model, None, discretizer, auto_reg_wrapper_config)
     
     # an example input and output sequences
     en_batch = ['Everything that is lost that is lost.', 'we must imagine Sisyphe happy.']

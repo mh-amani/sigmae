@@ -9,6 +9,7 @@ class ImageInputAutoRegWrapper(AutoRegWrapper):
     def __init__(
         self,
         vector_model,
+        input_discretizer,
         output_discretizer,
         config,
     ):
