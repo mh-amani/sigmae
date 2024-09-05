@@ -15,7 +15,7 @@ class ImageInputAutoRegWrapper(AutoRegWrapper):
     ):
         super().__init__(
             vector_model=vector_model,
-            input_discretizer=None,
+            input_discretizer=input_discretizer,
             output_discretizer=output_discretizer,
             config=config,
         )
