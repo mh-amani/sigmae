@@ -6,8 +6,8 @@ model:
   config: 
     _target_: 'transformers.BartConfig'
     d_model: ${model.model_params.d_model}
-    encoder_layers: 4
-    decoder_layers: 4
+    encoder_layers: 8
+    decoder_layers: 8
     vocab_size: 23
     max_position_embeddings: ${add_int:${model.model_params.max_x_length},${model.model_params.max_z_length}}
     encoder_attention_heads: 8

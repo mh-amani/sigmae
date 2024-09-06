@@ -33,13 +33,13 @@ class RandomSupervisionSampler(Sampler):
             if coin_toss <= self.data_type_sampling_probability[0]:
                 # Sample from fully supervised data (x, z)
                 indices.extend(self._sample_indices(0, self.dataset.sup_len_xz, self.batch_size, g))
-            elif coin_toss <= self.data_type_sampling_probability[0] + self.data_type_sampling_probability[1]:
-                # Sample from partially supervised data (x only)
+            elif coin_toss <= (1 - self.data_type_sampling_probability[0]) * (1 - self.data_type_sampling_probability[1]):
+                # Sample from unsupervised data (x only)
                 indices.extend(self._sample_indices(self.dataset.sup_len_xz, 
                                                     self.dataset.sup_len_xz + self.dataset.sup_len_x, 
                                                     self.batch_size, g))
             else:
-                # Sample from unsupervised data
+                # Sample from unsupervised data (z only)
                 indices.extend(self._sample_indices(self.dataset.sup_len_xz + self.dataset.sup_len_x, 
                                                     self.data_source_len, 
                                                     self.batch_size, g))

@@ -5,9 +5,26 @@ defaults:
   - override /data/dataset: text/scan_dataset
   - override /model: bart_softmax_bart_times_two
 
+trainer:
+  min_epochs: 50
+  max_epochs: 100
 
+callbacks:
+  supervision_scheduler:
+    scheduler_xz: 
+      hp_init: 0.0
+      hp_end: 0.0
+    scheduler_z:
+      hp_init: 1.0
+      hp_end: 1.0
+
+data:
+  supervision_ratio: [0, 1.00]
+  batch_size: 210
 
 model:
+  optimizer:
+    lr: 0.0001
   model_params:
     # to be manually set
     input_vocab_size: 17

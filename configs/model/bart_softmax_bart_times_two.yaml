@@ -7,6 +7,8 @@ defaults:
  - override /model/components/discretizers@models_config.discretizer_x: softmaxDB
  - override /model/components/discretizers@models_config.discretizer_z: softmaxDB
 
+_target_: src.models.sigmae_lit_module_text_to_text.SigmaeLitModuleTextToText
+
 models_config:
   sequence_model_xz: 
     config:

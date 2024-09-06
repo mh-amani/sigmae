@@ -53,7 +53,7 @@ class AbstractDiscreteLayer(nn.Module):
         elif self.encoder_embedding_dim is not None and self.vocab_size is not None:
             self.encoder_embedding = nn.Embedding(self.vocab_size, self.encoder_embedding_dim)
             self.encoder_embedding.requires_grad_(self.config['encoder_embedding_trainable'])
-            torch.nn.init.normal_(self.encoder_embedding.weight, mean=0, std=1/math.sqrt(self.encoder_embedding_dim))
+            torch.nn.init.normal_(self.encoder_embedding.weight, mean=0, std=1/math.sqrt(self.encoder_embedding_dim * self.vocab_size))
         else:
             raise ValueError('Either encoder_embedding or both encoder_embedding_dim and vocab_size must be provided')
 
@@ -65,7 +65,7 @@ class AbstractDiscreteLayer(nn.Module):
         elif self.decoder_embedding_dim is not None and self.vocab_size is not None:
             self.decoder_embedding = nn.Embedding(self.vocab_size, self.decoder_embedding_dim)
             self.decoder_embedding.requires_grad_(self.config['decoder_embedding_trainable'])
-            torch.nn.init.normal_(self.decoder_embedding.weight, mean=0, std=1/math.sqrt(self.decoder_embedding_dim))
+            torch.nn.init.normal_(self.decoder_embedding.weight, mean=0, std=1/math.sqrt(self.decoder_embedding_dim * self.vocab_size))
         else:
             raise ValueError('Either decoder_embedding or both decoder_embedding_dim and vocab_size must be provided')
 
@@ -75,7 +75,7 @@ class AbstractDiscreteLayer(nn.Module):
         elif self.decoder_embedding_dim is not None and self.unembedding_dim is not None:
             self.linear_head = nn.Linear(self.decoder_embedding_dim, self.unembedding_dim)
             self.linear_head.requires_grad_(self.config['linear_head_trainable'])
-            torch.nn.init.normal_(self.linear_head.weight, mean=0, std=1/math.sqrt(self.unembedding_dim))
+            torch.nn.init.normal_(self.linear_head.weight, mean=0, std=1/math.sqrt(self.unembedding_dim * self.decoder_embedding_dim))
         else:
             raise ValueError('Either linear_head or both decoder_embedding_dim and unembedding_dim must be provided')
 
