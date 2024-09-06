@@ -1,6 +1,10 @@
 # make sure to activate the correct conda environment
 source /dlabscratch1/amani/miniconda3/bin/activate sigmae
 
+cd /dlabscratch1/amani/sigmae
+echo "Starting training"
+pwd
+
 # supervised scan to 100% accuracy
 # python ./src/train.py \
 #     experiment=scan_bart \

@@ -24,8 +24,8 @@ scheduler:
   _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
   # _partial_: true # it will return a partial function
   mode: min
-  factor: 0.1
-  patience: 2
+  factor: 0.95
+  patience: 5
   threshold: 0.1
   threshold_mode: "rel" # rel or abs
   cooldown: 2
