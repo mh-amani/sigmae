@@ -1,7 +1,7 @@
 defaults:
   - default
 
-_target_: src.data.datamodule.text_lightning_datamodule.TextPLDataModule
+_target_: src.data.datamodule.image_lightning_datamodule.ImagePLDataModule
 
 data_type_sampling_probability: 
   - 0

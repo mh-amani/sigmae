@@ -2,9 +2,9 @@
 
 defaults:
   - example
-  - override /data: text
-  - override /data/dataset: text/scan_dataset
-  - override /model: bart_softmax_bart_times_two
+  - override /data: image
+  - override /data/dataset: image/mnist_dataset
+  - override /model: vit_softmax_bart_cont
 
 trainer:
   min_epochs: 50
@@ -45,21 +45,19 @@ model:
         config:
           vocab_size: ${model.model_params.input_vocab_size}
           # max_position_embeddings: ${input_max_position_embeddings}
-      tokenizer:
-        _target_: transformers.AutoTokenizer.from_pretrained
-        pretrained_model_name_or_path: "./data/tokenizers/scan/commands"
-        add_special_tokens: true
-    
+
+      tokenizer: null
+
     sequence_model_zx:
       config:
         max_lengths:
           input: ${model.model_params.max_z_length}
-          output: ${model.model_params.max_x_length}
+          output: ${model.model_params.max_x_length} #should be Patches actually 
       model:
         config:
           vocab_size: ${model.model_params.output_vocab_size}
           # max_position_embeddings: ${output_max_position_embeddings}
-      tokenizer:
-        _target_: transformers.AutoTokenizer.from_pretrained
-        pretrained_model_name_or_path: "./data/tokenizers/scan/actions"
-        add_special_tokens: true
+      # tokenizer:
+      #   _target_: transformers.AutoTokenizer.from_pretrained
+      #   pretrained_model_name_or_path: "./data/tokenizers/scan/actions"
+      #   add_special_tokens: true

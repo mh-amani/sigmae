@@ -3,7 +3,7 @@ import torch
 from src.data.datamodule.abstract_lightning_datamodule import AbstractPLDataModule
 import numpy as np
 
-class TextPLDataModule(AbstractPLDataModule):
+class ImagePLDataModule(AbstractPLDataModule):
 
     def __init__(
         self,

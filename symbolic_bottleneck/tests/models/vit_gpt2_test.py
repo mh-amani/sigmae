@@ -73,6 +73,7 @@ def AutoRegWrappedBartTest():
     # # get the models and the discretizers
     
     im2txt_model, im2txt_vector_model, _, im2txt_decoder_embedding, im2txt_linear_head = UnWrappedVITGPT2(config_vit_gpt2, im2txt_discretizer_config)
+    breakpoint()
     image_processor = AutoImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
     im2txt_tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
     

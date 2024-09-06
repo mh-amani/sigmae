@@ -1,22 +1,25 @@
 defaults: 
  - default
  - override /model/components/sequence_models@models_config.sequence_model_xz: bart
- - override /model/components/sequence_models@models_config.sequence_model_zx: bart
+ - override /model/components/sequence_models@models_config.sequence_model_zx: vision_transformer
  - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_xzx: bart_bart
  - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_zxz: bart_bart
- - override /model/components/discretizers@models_config.discretizer_x: softmaxDB
+ - override /model/components/discretizers@models_config.discretizer_x: identity
  - override /model/components/discretizers@models_config.discretizer_z: softmaxDB
 
-_target_: src.models.sigmae_lit_module_text_to_text.SigmaeLitModuleTextToText
+_target_: src.models.sigmae_lit_module_im_to_text.SigmaeLitModuleImageToText
+
+#here z is the image and x is the text
 
 models_config:
+  #im2txt
   sequence_model_xz: 
     config:
       max_lengths:
         input: ${model.model_params.max_x_length}
         output: ${model.model_params.max_z_length}
-        
-  sequence_model_zx: 
+
+  sequence_model_zx:
     config:
       max_lengths:
         input: ${model.model_params.max_z_length}
@@ -25,15 +28,15 @@ models_config:
   discretizer_x:
     config:
       dimensions:
-        vocab_size: ${model.model_params.input_vocab_size}
-        encoder_embedding_dim: ${model.model_params.d_model}
-        decoder_embedding_dim: ${model.model_params.d_model}
-        unembedding_dim: ${model.model_params.input_vocab_size}
-
-  discretizer_z:
-    config:
-      dimensions:
         vocab_size: ${model.model_params.output_vocab_size}
         encoder_embedding_dim: ${model.model_params.d_model}
         decoder_embedding_dim: ${model.model_params.d_model}
         unembedding_dim: ${model.model_params.output_vocab_size}
+    
+
+  discretizer_z:
+    config:
+        dimensions:
+          encoder_embedding_dim: ${model.model_params.d_model}
+          decoder_embedding_dim: ${model.model_params.d_model}
+          unembedding_dim: ${model.model_params.d_model}
