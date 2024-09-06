@@ -1,4 +1,4 @@
-from .abstract_discrete_layer import AbstractDiscreteLayer
+from .abstract_bottleneck import AbstractBottleneck
 import torch
 import math
 
@@ -15,7 +15,7 @@ import math
 #     }
 
 
-class SoftmaxDiscreteBottleneck(AbstractDiscreteLayer):
+class SoftmaxDiscreteBottleneck(AbstractBottleneck):
     def __init__(self, configs) -> None:
         super().__init__(configs)
 
@@ -41,5 +41,5 @@ class SoftmaxDiscreteBottleneck(AbstractDiscreteLayer):
             quantized_vector_encoder = torch.matmul(score, self.encoder_embedding.weight)
             quantized_vector_decoder = torch.matmul(score, self.decoder_embedding.weight)
         quantization_loss = torch.tensor(0.0).to(x)
-        return {"id": idx, "score": score, "logit": logits, "quantized_vector_encoder": quantized_vector_encoder, 
-                "quantized_vector_decoder": quantized_vector_decoder, "quantization_loss": quantization_loss}
+        return {"id": idx, "score": score, "logit": logits, "vector_encoder": quantized_vector_encoder, 
+                "vector_decoder": quantized_vector_decoder, "quantization_loss": quantization_loss}

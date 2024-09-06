@@ -1,4 +1,4 @@
-from .abstract_discrete_layer import AbstractDiscreteLayer
+from .abstract_bottleneck import AbstractBottleneck
 import torch
 from torch import nn
 import numpy as np
@@ -6,7 +6,7 @@ import numpy as np
 import math
 
 
-class VQVAEDiscreteLayer(AbstractDiscreteLayer):
+class VQVAEDiscreteLayer(AbstractBottleneck):
     def __init__(self, dims, **kwargs) -> None:
         super().__init__(dims, **kwargs)      
 

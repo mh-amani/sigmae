@@ -1,6 +1,8 @@
 import torch 
 from symbolic_bottleneck.utils import instantiate_from_config
-
+from transformers.models.vit.modeling_vit import ViTPatchEmbeddings
+from transformers.models.vision_encoder_decoder.modeling_vision_encoder_decoder import VisionEncoderDecoderModel
+from copy import deepcopy
 def EncoderDecoderUnwrapperFromConfig(model_config, discretizer_enc_config, discretizer_dec_config):
     """
     Unwraps the encoder-decoder model to get the encoder and decoder weights.
@@ -14,19 +16,32 @@ def EncoderDecoderUnwrapperFromConfig(model_config, discretizer_enc_config, disc
         discretizer_enc: The encoder weights.
         discretizer_dec: The decoder weights.
     """
-
+    
     model = instantiate_from_config(model_config)
     
     vector_model, encoder_embedding, decoder_embedding, linear_head = EncoderDecoderUnwrapper(model).values()
-    vocab_size = vector_model.config.vocab_size 
-    embed_dim = vector_model.config.d_model
+
+    vocab_size = None
+    embed_dim = None
+    if hasattr(vector_model.config, 'vocab_size'): 
+        vocab_size = vector_model.config.vocab_size
+    if hasattr(vector_model.config, 'd_model'):    
+        embed_dim = vector_model.config.d_model
+    if isinstance(vector_model, VisionEncoderDecoderModel):
+        vocab_size = vector_model.config.decoder.vocab_size
+        embed_dim = vector_model.config.decoder.n_embd
+    
+    if vocab_size is None or embed_dim is None:
+        raise ValueError("The vocab_size or embed_dim is not retrievable from the model config - You need to implement the unwrapping for this type of model")
+        
     dimensions = {'decoder_embedding_dim': embed_dim, 'vocab_size': vocab_size, 
                   'encoder_embedding_dim': embed_dim, 'unembedding_dim': vocab_size}
     disc_config = {'dimensions': dimensions, 'encoder_embedding': encoder_embedding,
                      'decoder_embedding': decoder_embedding, 'linear_head': linear_head}
-    discretizer_enc_config['config'].update(disc_config)
-    discretizer_dec_config['config'].update(disc_config)
-    discretizer_enc = instantiate_from_config(discretizer_enc_config)
+    if discretizer_enc_config is not None:
+        discretizer_enc_config['config'].update(disc_config)
+    discretizer_dec_config['config'].update(disc_config) 
+    discretizer_enc = instantiate_from_config(discretizer_enc_config) if discretizer_enc_config is not None else None
     discretizer_dec = instantiate_from_config(discretizer_dec_config)
 
     return {
@@ -45,41 +60,112 @@ def EncoderDecoderUnwrapper(enc_dec_model):
         decoder_embedding_weight: The decoder weights.
         linearhead_weight: The linear head weights.
     """
-    # Get the encoder and decoder weights
-    encoder_embedding_weight = enc_dec_model.get_encoder().embed_tokens.weight.clone()
-    encoder_embedding = torch.nn.Embedding(encoder_embedding_weight.shape[0], encoder_embedding_weight.shape[1])
-    encoder_embedding.weight.data = encoder_embedding_weight
-    try:
-        encoder_embedding.weight.data = enc_dec_model.model.encoder.embed_scale * encoder_embedding.weight.data
-    except:
-        pass
-
-    decoder_embedding_weight = enc_dec_model.get_decoder().embed_tokens.weight.clone()
-    decoder_embedding = torch.nn.Embedding(decoder_embedding_weight.shape[0], decoder_embedding_weight.shape[1])
-    decoder_embedding.weight.data = decoder_embedding_weight
-    try:
-        decoder_embedding.weight.data = enc_dec_model.model.decoder.embed_scale * decoder_embedding.weight.data
-    except:
-        pass
-
-    try:
-        linear_head_weight = enc_dec_model.lm_head.weight.clone()
-        linear_head = torch.nn.Linear(linear_head_weight.shape[1], linear_head_weight.shape[0])
-        linear_head.weight.data = linear_head_weight
-    # linearhead_bias = enc_dec_model.lm_head.bias
-    # linearhead_final_logit_bias = enc_dec_model.final_logits_bias
-    # linear_head = enc_dec_model.get_output_embeddings()
-    except:
-        linear_head = None  
-
-    try:
-        vector_model = enc_dec_model.model
-    except:
-        vector_model = enc_dec_model
+    
+    encoder_embedding = UnWrapEmbeddings( enc_dec_model.get_encoder())
+    decoder_embedding = UnWrapEmbeddings(enc_dec_model.get_decoder())
+    linear_head = UnWrapLinearHead(enc_dec_model)
+    vector_model = UnWrapVectorModel(enc_dec_model)
     return {'vector_model': vector_model, 'encoder_embedding': encoder_embedding, 
         'decoder_embedding': decoder_embedding, 'linear_head': linear_head} 
+    
+def UnWrapVectorModel(model):
+    vector_model = model.base_model
+    return vector_model
+    
+    
+def UnWrapLinearHead(model):
+    linear_head = model.get_output_embeddings()
+    #TODO: Is this necessary ? We should check if we can't replace this with a deepcopy or the embedding itself (a one-liner)
+    if isinstance(linear_head, torch.nn.Linear):
+        linear_head_weight = linear_head.weight.clone()
+        linear_head = torch.nn.Linear(linear_head_weight.shape[1], linear_head_weight.shape[0])
+        linear_head.weight.data = linear_head_weight
+        return linear_head
+    
+    else:
+        #puposely raise an error to make sure we don't forget to implement the unwrapping for this type of embeddings and avoid silent errors
+        raise ValueError(f"The linear head of type {type(linear_head)} is not supported - You need to implement the unwrapping for this type of embeddings")
+    
+def UnWrapEmbeddings(model):
+    def UnWrapVitEmbeddings(embeddings):
+        # TODO: Is this really necessary ? We should check if we can just remove the deepcopy and it still works
+        return deepcopy(embeddings)
+
+    def UnWrapDiscreteEmbeddings(embeddings, embed_scale):
+        # TODO: Is this necessary ? We should check if we can't replace this with a deepcopy or the embedding itself (a one-liner)
+        embedding_weight = embeddings.weight.clone()
+        embedding = torch.nn.Embedding(embedding_weight.shape[0], embedding_weight.shape[1])
+        embedding.weight.data = embedding_weight
+        embedding.weight.data = embed_scale * embedding.weight.data
+        return embedding
+    
+    #some models don't have the get_input_embeddings method, so we need to handle this case
+    try:
+        embeddings = model.get_input_embeddings()
+    except:
+        #TODO: This is crazy but has to be done. For example, for some reason MBartEncoder has the embed_tokens attribute instead of get_input_embeddings
+        if hasattr(model, 'embed_tokens'):
+            embeddings = model.embed_tokens
+        else:
+            raise ValueError(
+                f"Model of type {type(model)} does not have the 'get_input_embeddings' and its input embeddings are not called 'embed tokens' - You need to implement the unwrapping for this type of embeddings"
+            )
+
+    if isinstance(embeddings, torch.nn.Embedding):
+        embed_scale = model.embed_scale if hasattr(model, 'embed_scale') else 1.0
+        return UnWrapDiscreteEmbeddings(embeddings, embed_scale)
+    elif isinstance(embeddings, ViTPatchEmbeddings):
+        return UnWrapVitEmbeddings(embeddings)
+    else:
+        #puposely raise an error to make sure we don't forget to implement the unwrapping for this type of embeddings and avoid silent errors
+        raise ValueError(f"input embeddings of type {type(embeddings)} are not supported - You need to implement the unwrapping for this type of embeddings")
 
 
+#TODO: OLD EncoderDecoderUnwrapper. I can probably remove this
+# def EncoderDecoderUnwrapper(enc_dec_model):
+#     """
+#     Unwraps the encoder-decoder model of a text to text model to get the encoder and decoder weights.
+#     Args:
+#         enc_dec_model: The encoder-decoder model.
+#     Returns:
+#         vector_model: The encoder-decoder model without embedding and head, pure transfomer.
+#         encoder_embedding_weight: The encoder weights.
+#         decoder_embedding_weight: The decoder weights.
+#         linearhead_weight: The linear head weights.
+#     """
+#     # Get the encoder and decoder weights
+#     encoder_embedding_weight = enc_dec_model.get_encoder().get_input_embeddings().weight.clone()
+#     encoder_embedding = torch.nn.Embedding(encoder_embedding_weight.shape[0], encoder_embedding_weight.shape[1])
+#     encoder_embedding.weight.data = encoder_embedding_weight
+#     try:
+#         encoder_embedding.weight.data = enc_dec_model.model.encoder.embed_scale * encoder_embedding.weight.data
+#     except:
+#         pass
+
+#     decoder_embedding_weight = enc_dec_model.get_decoder().embed_tokens.weight.clone()
+#     decoder_embedding = torch.nn.Embedding(decoder_embedding_weight.shape[0], decoder_embedding_weight.shape[1])
+#     decoder_embedding.weight.data = decoder_embedding_weight
+#     try:
+#         decoder_embedding.weight.data = enc_dec_model.model.decoder.embed_scale * decoder_embedding.weight.data
+#     except:
+#         pass
+
+#     try:
+#         linear_head_weight = enc_dec_model.lm_head.weight.clone()
+#         linear_head = torch.nn.Linear(linear_head_weight.shape[1], linear_head_weight.shape[0])
+#         linear_head.weight.data = linear_head_weight
+#     # linearhead_bias = enc_dec_model.lm_head.bias
+#     # linearhead_final_logit_bias = enc_dec_model.final_logits_bias
+#     # linear_head = enc_dec_model.get_output_embeddings()
+#     except:
+#         linear_head = None  
+
+#     try:
+#         vector_model = enc_dec_model.model
+#     except:
+#         vector_model = enc_dec_model
+#     return {'vector_model': vector_model, 'encoder_embedding': encoder_embedding, 
+#         'decoder_embedding': decoder_embedding, 'linear_head': linear_head} 
 
 
 

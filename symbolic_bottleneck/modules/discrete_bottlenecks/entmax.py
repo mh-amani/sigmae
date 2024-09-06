@@ -1,4 +1,4 @@
-from .abstract_discrete_layer import AbstractDiscreteLayer
+from .abstract_bottleneck import AbstractDiscreteLayer
 import torch
 import torch.nn as nn
 from entmax import sparsemax, entmax15, entmax_bisect
