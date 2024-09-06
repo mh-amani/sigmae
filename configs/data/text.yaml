@@ -1,0 +1,13 @@
+defaults:
+  - default
+
+_target_: src.data.datamodule.text_lightning_datamodule.TextPLDataModule
+
+data_type_sampling_probability: 
+  - ${callbacks.supervision_scheduler.scheduler_xz.hp_init}
+  - ${callbacks.supervision_scheduler.scheduler_z.hp_init} #[xz, p(z|not zx)]
+
+max_x_length: ${model.model_params.max_x_length}
+max_z_length: ${model.model_params.max_z_length}
+
+remove_long_data_points_and_print_stats: false

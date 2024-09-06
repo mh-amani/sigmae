@@ -1,10 +1,19 @@
 # @package _global_
 
+# to execute this experiment run:
+# python train.py experiment=example
+
 defaults:
-  - example
-  - override /data: text
-  - override /data/dataset: text/scan_dataset
+  # - override /data: default
+  - override /data/dataset: image/mnist_dataset
   - override /model: bart_softmax_bart_times_two
+  # - override /callbacks: default
+  # - override /trainer: default
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["mnist", "vit"]
 
 trainer:
   min_epochs: 50
@@ -26,13 +35,6 @@ data:
 model:
   optimizer:
     lr: 0.0001
-  scheduler:
-    factor: 0.9
-    patience: 2
-    threshold: 0.05
-    threshold_mode: "rel" # rel or abs
-    cooldown: 2
-
   model_params:
     # to be manually set
     input_vocab_size: 17

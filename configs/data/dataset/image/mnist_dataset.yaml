@@ -1,0 +1,7 @@
+defaults: 
+  - default
+
+dataset_name_or_path: mnist
+
+input_label: 'label'
+output_label: 'image'
