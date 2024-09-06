@@ -129,6 +129,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         input_attention_mask,
         output_embeds,
         output_attention_mask,
+        **kwargs
     ):
         return {
             "inputs_embeds": input_embeds,
@@ -149,7 +150,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         outputs = super().teacher_forced_model_forward(
             input_embeds = input_embeds,
             input_attention_mask = input_attention_mask,
-            output_embeds_dec = output_embeds_dec,
+            output_embeds = output_embeds_dec,
             output_attention_mask = output_attention_mask,
             output_ids = output_ids
         )

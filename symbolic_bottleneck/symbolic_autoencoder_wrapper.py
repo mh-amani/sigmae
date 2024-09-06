@@ -39,11 +39,11 @@ class SymbolicAutoEncoderWrapper(Module):
                 teacher_force_output=False, max_output_length=max_y_length)
 
         y_inputs = self.transform_xy_outputs_to_y_inputs(xy_outputs)
-        y_inputs['quantized_vector_encoder'] = y_inputs['quantized_vector_encoder'] * y_inputs['output_attention_mask'].unsqueeze(-1) + \
-            (1 - y_inputs['output_attention_mask']).detach().unsqueeze(-1) * y_inputs['quantized_vector_encoder'] # I don't even know what I'm doing here
+        y_inputs['vector_encoder'] = y_inputs['vector_encoder'] * y_inputs['output_attention_mask'].unsqueeze(-1) + \
+            (1 - y_inputs['output_attention_mask']).detach().unsqueeze(-1) * y_inputs['vector_encoder'] # I don't even know what I'm doing here
 
         yz_outputs = self.model_y_to_z(
-            input_embeds_enc=y_inputs['quantized_vector_encoder'], input_attention_mask=y_inputs['output_attention_mask']>0, 
+            input_embeds_enc=y_inputs['vector_encoder'], input_attention_mask=y_inputs['output_attention_mask']>0, 
             output_ids=z_ids, output_embeds_dec=z_embeds_dec, output_attention_mask=z_attention_mask,
             teacher_force_output=teacher_force_z, max_output_length=max_z_length,)
             
@@ -52,7 +52,7 @@ class SymbolicAutoEncoderWrapper(Module):
         return { 'id_y': xy_outputs['id'], 'id_z': yz_outputs['id'], 
                 'score_y': xy_outputs['score'], 'score_z': yz_outputs['score'],
                 'logit_y': xy_outputs['logit'], 'logit_z': yz_outputs['logit'],
-                'quantized_vector_encoder': yz_outputs['quantized_vector_encoder'], 'quantized_vector_decoder': yz_outputs['quantized_vector_decoder'],
+                'vector_encoder': yz_outputs['vector_encoder'], 'vector_decoder': yz_outputs['vector_decoder'],
                 'y_attention_mask': xy_outputs['output_attention_mask'], 'z_attention_mask': yz_outputs['output_attention_mask'],
                 'quantization_loss': quantization_loss,}
                 # 'xy_outputs': xy_outputs, 'yz_outputs': yz_outputs,} # remove later... aligator

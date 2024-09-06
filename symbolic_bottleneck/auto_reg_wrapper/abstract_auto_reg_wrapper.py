@@ -101,7 +101,6 @@ class AbstractAutoRegWrapper(Module):
         raise NotImplementedError
     
     def teacher_forced_model_forward(self, **kwargs):
-        
         args_for_seq_forward = self.prepare_args_for_model_forward(**kwargs)
         
         model_outputs = self.model.forward(
