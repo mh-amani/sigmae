@@ -1,0 +1,11 @@
+defaults:
+  - default
+
+_target_: src.data.datamodule.text_lightning_datamodule.TextPLDataModule
+
+data_type_sampling_probability: 
+  - 0
+  - 1 #[xz, p(z|not zx)]
+
+max_x_length: ${model.model_params.max_x_length}
+max_z_length: ${model.model_params.max_z_length}
