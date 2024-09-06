@@ -36,8 +36,6 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             config=config,
         )
         
-        self.control_token_ids = self.config['control_token_ids']
-        
         self.soft_average = self.config['soft_average']
 
         #TODO: This can probably be removed
