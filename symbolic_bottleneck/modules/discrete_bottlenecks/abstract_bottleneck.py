@@ -29,6 +29,7 @@ class AbstractBottleneck(nn.Module):
         self._initialize_encoder_embedding()
         self._initialize_decoder_embedding()
         self._initialize_linear_head()
+        
 
     def _initialize_dimensions(self, config):
         dimensions = config.get('dimensions', {})
@@ -52,10 +53,9 @@ class AbstractBottleneck(nn.Module):
 
     
     def _check_consistency(self, embedding, embedding_dim, embedding_name):
-        
         in_dim, in_dim_name = self._fetch_in_dim_and_name()
                 
-        if  in_dim is not None and self.vocab_size != embedding.weight.shape[0]:
+        if  in_dim is not None and in_dim != embedding.weight.shape[0]:
             raise ValueError(f'Inconsistent {in_dim_name} for {embedding_name} embedding.' + 
                              f'Both an {embedding_name} (shape: {embedding.weight.shape}) and a {in_dim_name} ({in_dim}) were provided, but they do not match.' +
                              f'Either provide only the embedding or provide the {in_dim_name} and embedding_dim or make sure they are consistent.')
@@ -86,7 +86,7 @@ class AbstractBottleneck(nn.Module):
     
     def _initialize_encoder_embedding(self):
         
-        in_dim, _ = self._fetch_in_dim_and_name()
+        in_dim, in_dim_name = self._fetch_in_dim_and_name()
         
         if self.config.get('encoder_embedding') is not None:
             self._check_consistency(self.config['encoder_embedding'], self.encoder_embedding_dim, 'encoder_embedding')
@@ -100,7 +100,7 @@ class AbstractBottleneck(nn.Module):
             torch.nn.init.normal_(self.encoder_embedding.weight, mean=0, std=1/math.sqrt(self.encoder_embedding_dim))
             
         else:
-            raise ValueError('Either encoder_embedding or both encoder_embedding_dim and vocab_size must be provided')
+            raise ValueError(f"Either encoder_embedding (currently {self.config.get('encoder_embedding')}) or both encoder_embedding_dim (currently: {self.encoder_embedding_dim}) and {in_dim_name} (currently {in_dim}) must be provided")
 
     def _initialize_decoder_embedding(self):
         
@@ -113,7 +113,7 @@ class AbstractBottleneck(nn.Module):
             assert in_dim == self.decoder_embedding.weight.shape[0], \
                 f'{in_dim_name} and decoder_embedding do not match (can happen if your encoder_embedding and decoder_embedding have a different {in_dim_name})'
                 
-        elif self.decoder_embedding_dim is not None and self.vocab_size is not None:
+        elif self.decoder_embedding_dim is not None and in_dim is not None:
             self.decoder_embedding = self._instantiate_embedding(in_dim, self.decoder_embedding_dim)
             self.decoder_embedding.requires_grad_(self.config['decoder_embedding_trainable'])
             torch.nn.init.normal_(self.decoder_embedding.weight, mean=0, std=1/math.sqrt(self.decoder_embedding_dim))

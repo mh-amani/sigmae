@@ -9,6 +9,7 @@ class AbstractAutoRegWrapper(Module):
         "device",
         "use_last_step_states",
         "use_past_key_values",
+        "control_token_ids",
     ]
     
     
@@ -37,6 +38,8 @@ class AbstractAutoRegWrapper(Module):
             self.input_discretizer.to(self.device)
         if self.output_discretizer is not None:
             self.output_discretizer.to(self.device)
+            
+        self.control_token_ids = self.config['control_token_ids']
 
     @classmethod
     def _validate_config(cls, config):
@@ -166,10 +169,10 @@ class AbstractAutoRegWrapper(Module):
     
     def one_step_sequential_forward(
         self,
-        input_embeds,
-        input_attention_mask, 
+        input_embeds, 
         output_embeds,
-        output_attention_mask,
+        input_attention_mask=None,
+        output_attention_mask=None,
         last_step_states={},
     ) -> Dict[str, Any]:
     
@@ -228,11 +231,11 @@ class AbstractAutoRegWrapper(Module):
     def sequential_forward(
         self,
         input_embeds,
-        input_attention_mask, 
+        max_output_length,
         output_embeds_enc,
         output_embeds_dec,
-        output_attention_mask,
-        max_output_length
+        input_attention_mask = None, 
+        output_attention_mask = None,
     ):
         
         preprend_length = output_embeds_enc.shape[1]
