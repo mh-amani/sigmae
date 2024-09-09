@@ -33,8 +33,8 @@ class TextPLDataModule(AbstractPLDataModule):
 
         :param stage: Current stage of training ('fit', 'validate', 'test', or 'predict').
         """
-        self.tokenizer_x = self.trainer.model.tokenizer_x
-        self.tokenizer_z = self.trainer.model.tokenizer_z
+        self.processor_x = self.trainer.model.tokenizer_x
+        self.processor_z = self.trainer.model.tokenizer_z
         if self.kwargs.get('remove_long_data_points_and_print_stats', False):
             self.remove_long_data_points_and_print_stats(AbstractPLDataModule.Data)
 
@@ -69,8 +69,8 @@ class TextPLDataModule(AbstractPLDataModule):
             self._print_stats(split, stats)
 
     def _get_lengths(self, item):
-        x_encoding = self.tokenizer_x(item['x'], truncation=False, return_tensors="pt")
-        z_encoding = self.tokenizer_z(item['z'], truncation=False, return_tensors="pt")
+        x_encoding = self.processor_x(item['x'], truncation=False, return_tensors="pt")
+        z_encoding = self.processor_z(item['z'], truncation=False, return_tensors="pt")
         # x_encoding, z_encoding = self.collate_fn([item])
         return x_encoding['input_ids'].shape[1], z_encoding['input_ids'].shape[1]
 
@@ -97,7 +97,7 @@ class TextPLDataModule(AbstractPLDataModule):
         print(f"Total samples after filtering: {len(stats['filtered_data'])}")
 
     @staticmethod
-    def collate_fn(batch, tokenizer_x, tokenizer_z):
+    def collate_fn(batch, processor_x, processor_z):
         x_texts = [item['x'] for item in batch]
         z_texts = [item['z'] for item in batch]
         data_type = np.array([item['data_type'] for item in batch])
@@ -105,8 +105,8 @@ class TextPLDataModule(AbstractPLDataModule):
         ids = np.array([item['id'] for item in batch])
         ids = torch.tensor(ids)
         
-        x_encodings = tokenizer_x(x_texts, padding=True, return_tensors="pt", add_special_tokens=True)
-        z_encodings = tokenizer_z(z_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        x_encodings = processor_x(x_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        z_encodings = processor_z(z_texts, padding=True, return_tensors="pt", add_special_tokens=True)
         
         return {
             'x_ids': x_encodings['input_ids'],

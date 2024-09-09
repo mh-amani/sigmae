@@ -33,14 +33,14 @@ class ImagePLDataModule(AbstractPLDataModule):
 
         :param stage: Current stage of training ('fit', 'validate', 'test', or 'predict').
         """
-        self.processor_x = self.trainer.model.processor_x
         self.processor_z = self.trainer.model.processor_z
+        self.processor_x = None
         self._setup(stage)
 
     @staticmethod
     def collate_fn(batch, processor_z, processor_x=None):
         x_items = [item['x'] for item in batch]
-        z_items = [item['z'] for item in batch]
+        z_items = [item['z'].convert("RGB") for item in batch]
         data_type = np.array([item['data_type'] for item in batch])
         data_type = torch.tensor(data_type)
         ids = np.array([item['id'] for item in batch])
@@ -50,11 +50,12 @@ class ImagePLDataModule(AbstractPLDataModule):
             x_encodings = processor_x(x_items, padding=True, return_tensors="pt", add_special_tokens=True)
         else:
             x_encodings = torch.tensor(x_items)
-        z_encodings = processor_z(z_items, padding=True, return_tensors="pt", add_special_tokens=True)
+        z_encodings = processor_z(z_items, padding=True, return_tensors="pt", add_special_tokens=True)['pixel_values']
         
         return {
             'x': x_encodings,
             'z': z_encodings,
+            'z_unrpocessed': torch.tensor(np.array(z_items), dtype=torch.float32, device=z_encodings.device),
             'data_type': data_type,
             'ids': ids
         }

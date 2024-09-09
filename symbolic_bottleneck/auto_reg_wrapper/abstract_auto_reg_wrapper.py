@@ -100,8 +100,11 @@ class AbstractAutoRegWrapper(Module):
         
         raise NotImplementedError
     
-    def teacher_forced_model_forward(self, **kwargs):
-        args_for_seq_forward = self.prepare_args_for_model_forward(**kwargs)
+    def teacher_forced_model_forward( self, **kwargs
+        ):
+        args_for_seq_forward = self.prepare_args_for_model_forward(
+            **kwargs
+        )
         
         model_outputs = self.model.forward(
             output_hidden_states=True,
@@ -117,7 +120,7 @@ class AbstractAutoRegWrapper(Module):
         )
         
         outputs = self.discretize_output(model_outputs[self.hidden_state_key][-1], teacher_forced = True ,**inputs_to_discretizer)
-        
+
         return outputs
     
     @abstractmethod
@@ -148,7 +151,7 @@ class AbstractAutoRegWrapper(Module):
             inputs = self.fetch_args_for_fn(self.teacher_forced_model_forward, **inputs_for_forward)
             outputs = self.teacher_forced_model_forward(**inputs)
         
-        return self.return_output_dict(outputs)
+        return self.return_output_dict({**inputs_for_forward, **outputs})
 
     @abstractmethod
     def prepare_seq_forward_params(

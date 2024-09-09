@@ -14,7 +14,6 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         "control_token_ids.input_pad_token_id",
         "control_token_ids.output_unknown_token_id",
         "control_token_ids.output_eos_token_id",
-        "control_token_ids.output_eos_token_id",
         "soft_average",
         "output_prepending_ids",
     ]
@@ -37,11 +36,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         )
         
         self.soft_average = self.config['soft_average']
-
-        #TODO: This can probably be removed
-        # self.output_discretizer.encoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(self.output_discretizer.encoder_embedding.weight.device))
-        # self.output_discretizer.decoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(self.output_discretizer.encoder_embedding.weight.device))
-
+        
         output_prepending_ids = self.config['output_prepending_ids']
         # output_prepending_embeds_enc = self.config.get('output_prepending_embeds_enc', None)
         # output_prepending_embeds_dec = self.config.get('output_prepending_embeds_dec', None)
@@ -49,7 +44,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         if output_prepending_ids is None: #and (output_prepending_embeds_enc is None or output_prepending_embeds_dec is None):
             raise ValueError("output_prepending_ids are not provided")
         #TODO: This can probably be removed BUT IS USEFUL FOR MODELS WHO HAVE CONTINUOUS OUTPUTS FOR DECODERS
-        # elif output_prepending_ids is None and (output_prepending_embeds_enc is not None and output_prepending_embeds_dec is not None):
+        # elif output_prepending_ids is None and output_prepending_embeds_dec is not None:
         #     self.output_prepending_ids = self.control_token_ids['pad_token_id_y'] * np.ones(output_prepending_embeds_dec.shape[:2], dtype=np.long)
         #     self.output_prepending_embeds_enc = output_prepending_embeds_enc.numpy()
         #     self.output_prepending_embeds_dec = output_prepending_embeds_dec.numpy()
@@ -110,8 +105,8 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
                 hidden_state,
                 supervision=True,
                 target_ids=output_ids,
-                target_attention_mask=output_attention_mask,
-                average_probs=self.soft_average['word_embeds_with_scores_forward']
+                target_attention_mask=output_attention_mask, # this is irrelavent. does nothing.
+                average_probs=self.soft_average['word_embeds_with_scores_forward'] # this is irrelavent. does nothing.
             )
             
         else:

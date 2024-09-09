@@ -25,15 +25,15 @@ models_config:
   discretizer_x:
     config:
       dimensions:
-        vocab_size: ${model.model_params.input_vocab_size}
+        vocab_size: ${model.model_params.x_vocab_size}
         encoder_embedding_dim: ${model.model_params.d_model}
         decoder_embedding_dim: ${model.model_params.d_model}
-        unembedding_dim: ${model.model_params.input_vocab_size}
+        unembedding_dim: ${model.model_params.x_vocab_size}
 
   discretizer_z:
     config:
       dimensions:
-        vocab_size: ${model.model_params.output_vocab_size}
+        vocab_size: ${model.model_params.z_vocab_size}
         encoder_embedding_dim: ${model.model_params.d_model}
         decoder_embedding_dim: ${model.model_params.d_model}
-        unembedding_dim: ${model.model_params.output_vocab_size}
+        unembedding_dim: ${model.model_params.z_vocab_size}

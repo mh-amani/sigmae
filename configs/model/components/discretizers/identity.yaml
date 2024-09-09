@@ -1,1 +1,4 @@
-_target_: symbolic_bottleneck.modules.discrete_bottlenecks.IdentityBottleneck
+defaults:
+  - default
+
+_target_: symbolic_bottleneck.modules.discrete_bottlenecks.identity.IdentityBottleneck

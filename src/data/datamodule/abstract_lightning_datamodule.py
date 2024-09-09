@@ -4,8 +4,8 @@ import numpy as np
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 import hydra
-from src.data.dataset import AbstractDataset
-from src.data.samplers import RandomSupervisionSampler, RandomSupervisionSamplerDDP
+from ..dataset import AbstractDataset
+from ..samplers import RandomSupervisionSampler, RandomSupervisionSamplerDDP
 from functools import partial
 
 class AbstractPLDataModule(LightningDataModule):
@@ -124,7 +124,7 @@ class AbstractPLDataModule(LightningDataModule):
                 seed=self.seed
             )
             
-        collate_fn = partial(self.collate_fn, tokenizer_x=self.tokenizer_x, tokenizer_z=self.tokenizer_z)
+        collate_fn = partial(self.collate_fn, processor_x=self.processor_x, processor_z=self.processor_z)
 
         return DataLoader(
             dataset=self.data_train,
@@ -159,7 +159,7 @@ class AbstractPLDataModule(LightningDataModule):
         :param dataset: The dataset to create a dataloader for.
         :return: A DataLoader instance.
         """
-        collate_fn = partial(self.collate_fn, tokenizer_x=self.tokenizer_x, tokenizer_z=self.tokenizer_z)
+        collate_fn = partial(self.collate_fn, processor_x=self.processor_x, processor_z=self.processor_z)
         return DataLoader(
             dataset=dataset,
             batch_size=self.batch_size_per_device,

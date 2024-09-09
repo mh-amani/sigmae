@@ -21,11 +21,11 @@ from dataclasses import dataclass
 class AbstractBottleneck(nn.Module):
     DISCRETE_BOTTLENECK: bool = True
     
-    def __init__(self, config) -> None:
+    def __init__(self, configs) -> None:
         super().__init__()
-        self.config = config
+        self.config = configs
 
-        self._initialize_dimensions(config)
+        self._initialize_dimensions(configs)
         self._initialize_encoder_embedding()
         self._initialize_decoder_embedding()
         self._initialize_linear_head()
@@ -97,7 +97,7 @@ class AbstractBottleneck(nn.Module):
         elif self.encoder_embedding_dim is not None and in_dim is not None:
             self.encoder_embedding = self._instantiate_embedding(in_dim, self.encoder_embedding_dim)
             self.encoder_embedding.requires_grad_(self.config['encoder_embedding_trainable'])
-            torch.nn.init.normal_(self.encoder_embedding.weight, mean=0, std=1/math.sqrt(self.encoder_embedding_dim * self.vocab_size))
+            torch.nn.init.normal_(self.encoder_embedding.weight, mean=0, std=1/math.sqrt(self.encoder_embedding_dim * in_dim))
         else:
             raise ValueError(f"Either encoder_embedding (currently {self.config.get('encoder_embedding')}) or both encoder_embedding_dim (currently: {self.encoder_embedding_dim}) and {in_dim_name} (currently {in_dim}) must be provided")
 
@@ -115,7 +115,7 @@ class AbstractBottleneck(nn.Module):
         elif self.decoder_embedding_dim is not None and in_dim is not None:
             self.decoder_embedding = self._instantiate_embedding(in_dim, self.decoder_embedding_dim)
             self.decoder_embedding.requires_grad_(self.config['decoder_embedding_trainable'])
-            torch.nn.init.normal_(self.decoder_embedding.weight, mean=0, std=1/math.sqrt(self.decoder_embedding_dim * self.vocab_size))
+            torch.nn.init.normal_(self.decoder_embedding.weight, mean=0, std=1/math.sqrt(self.decoder_embedding_dim * in_dim))
         else:
             raise ValueError('Either decoder_embedding or both decoder_embedding_dim and vocab_size must be provided')
 
