@@ -1,0 +1,127 @@
+_target_: ???
+model:
+  #Encoder copied from: "facebook/wav2vec2-xls-r-300m-en-to-15"
+  _target_: transformers.SpeechEncoderDecoderModel.from_encoder_decoder_configs
+    encoder_config:
+      _target_: transformers.Wav2Vec2Config
+      activation_dropout: 0.0
+      adapter_kernel_size: 3
+      adapter_stride: 2
+      add_adapter: true
+      apply_spec_augment: true
+      attention_dropout: 0.1
+      classifier_proj_size: 256
+      codevector_dim: 768
+      contrastive_logits_temperature: 0.1
+      conv_bias: true
+      conv_dim: 
+        - 512
+        - 512
+        - 512
+        - 512
+        - 512
+        - 512
+        - 512
+      conv_kernel:
+        - 10
+        - 3
+        - 3
+        - 3
+        - 3
+        - 2
+        - 2
+      conv_stride:
+        - 5
+        - 2
+        - 2
+        - 2
+        - 2
+        - 2
+        - 2
+      ctc_loss_reduction: "sum"
+      ctc_zero_infinity: false
+      diversity_loss_weight: 0.1
+      do_stable_layer_norm: true
+      eos_token_id: 2
+      feat_extract_activation: "gelu"
+      feat_extract_dropout: 0.0
+      feat_extract_norm: "layer"
+      feat_proj_dropout: 0.1
+      feat_quantizer_dropout: 0.0
+      final_dropout: 0.0
+      gradient_checkpointing: false
+      hidden_act: "gelu"
+      hidden_dropout: 0.1
+      hidden_size: 1024
+      initializer_range: 0.02
+      intermediate_size: 4096
+      layer_norm_eps: 1e-05
+      layerdrop: 0.1
+      mask_feature_length: 10
+      mask_feature_min_masks: 0
+      mask_feature_prob: 0.0
+      mask_time_length: 10
+      mask_time_min_masks: 2
+      mask_time_prob: 0.075
+      num_adapter_layers: 3
+      num_attention_heads: 16
+      num_codevector_groups: 2
+      num_codevectors_per_group: 320
+      num_conv_pos_embedding_groups: 16
+      num_conv_pos_embeddings: 128
+      num_feat_extract_layers: 7
+      num_hidden_layers: 24
+      num_negatives: 100
+      output_hidden_size: 1024
+      pad_token_id: 0
+      proj_codevector_dim: 768
+      tdnn_dilation:
+        - 1
+        - 2
+        - 3
+        - 1
+        - 1
+      tdnn_dim:
+        - 512
+        - 512
+        - 512
+        - 512
+        - 1500
+      tdnn_kernel:
+        - 5
+        - 3
+        - 3
+        - 1
+        - 1
+      use_weighted_layer_sum: false
+      vocab_size: 32
+      xvector_output_dim: 512
+
+    decoder_config:
+      #decoder is typical GPT2 config (copied from vision transformer)
+      _target_: transformers.GPT2Config
+      activation_function": "gelu_new"
+      add_cross_attention": true
+      architectures": ["GPT2LMHeadModel"]
+      attn_pdrop: 0.1
+      embd_pdrop: 0.1
+      initializer_range: 0.02
+      is_decoder: true
+      layer_norm_epsilon: 1e-05
+      model_type: "gpt2"
+      n_ctx: ${add_int:${model.model_params.max_x_length},${model.model_params.max_z_length}}
+      n_embd: ${model.model_params.d_model}
+      n_head: 8
+      n_inner: null
+      n_layer: 8
+      n_positions: ${add_int:${model.model_params.max_x_length},${model.model_params.max_z_length}}
+      reorder_and_upcast_attn: false
+      resid_pdrop: 0.1
+      scale_attn_by_inverse_layer_idx: false
+      scale_attn_weights: true
+      summary_activation: null
+      summary_first_dropout: 0.1
+      summary_proj_to_labels: true
+      summary_type: "cls_index"
+      summary_use_proj: true
+      vocab_size: ??? # 23 ?

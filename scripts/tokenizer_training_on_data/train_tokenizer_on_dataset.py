@@ -51,7 +51,6 @@ def create_tokenizer(dataset, tokenizer_type="word_level", **kwargs):
     eos_token="[EOS]"
     )
 
-    code.interact(local=locals())
 
     return custom_tokenizer
 
