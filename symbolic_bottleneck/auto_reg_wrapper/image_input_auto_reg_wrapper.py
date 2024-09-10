@@ -47,11 +47,11 @@ class ImageInputAutoRegWrapper(AutoRegWrapper):
         self,
         input_embeds,
         input_attention_mask,
-        output_embeds,
+        output_embeds_dec,
         output_attention_mask,
     ):
         return {
             "pixel_values": input_embeds,
-            "decoder_inputs_embeds": output_embeds,
+            "decoder_inputs_embeds": output_embeds_dec,
             "decoder_attention_mask": output_attention_mask,            
         }

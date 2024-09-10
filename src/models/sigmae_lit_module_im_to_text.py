@@ -51,13 +51,17 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         uni_channel_z = z[:, 0:1, ...]
         z_patches = self.unfold(uni_channel_z).permute(0, 2, 1)
         z_patches_embeds = self.discretizer_z.decoder_embedding(z_patches)
-        zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=z, z_embeds_dec=z_patches_embeds, 
+        zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=z, # z_embeds_dec=z_patches_embeds, 
                                                             z_attention_mask=torch.ones_like(z_patches, dtype=torch.bool),
-                                                            teacher_force_z=True)
+                                                            teacher_force_z=False)
         outputs['zxz'] = zxz_outputs
         outputs['zxz']['logit'] = zxz_outputs['id_z']
         labels['zxz'] = z_patches
-        
+
+        # debug the nan loss for zx problem.
+        # outputs = self.auto_reg_wrapped_model_zx(input_embeds_enc=z,)
+        # labels = z_patches
+
         return outputs, labels
 
     def model_step(
@@ -77,11 +81,13 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         unprocessed_z = batch['z_unrpocessed'].permute(0, 3, 1, 2)[:, 0:1, ...]
         # forward pass
         outputs, labels = self.forward(x, z, data_type, stage=stage)
-        output_image = self.fold(outputs['zxz']['logit'][..., :-1, :].permute(0, 2, 1))
+
+
+        output_image = self.fold(outputs['zxz']['logit'].permute(0, 2, 1))
 
         # compute losses, predictions and update metrics
 
-        loss = self.criterion(outputs['zxz']['logit'][..., :-1, :], labels['zxz'])
+        loss = self.criterion(outputs['zxz']['logit'], labels['zxz'])
         # loss= self.criterion(output_image, unprocessed_z/255)
         self.loss.update(loss)
 

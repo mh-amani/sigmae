@@ -32,7 +32,7 @@ model:
     x_vocab_size: 17
     z_patch_size: 16
     max_x_length: 20
-    max_z_length: 49
+    max_z_length: 50
     image_size: 28
     d_model: 512
     processor:

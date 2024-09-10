@@ -63,23 +63,22 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
             "input_ids": input_ids,
             "input_attention_mask": input_attention_mask,
             "input_embeds": input_embeds_enc,
-            # "output_embeds_enc": output_embeds_enc,
-            # "output_embeds_dec": output_embeds_dec,
-            "output_embeds": output_embeds_dec,
+            "output_embeds_enc": output_embeds_enc,
+            "output_embeds_dec": output_embeds_dec,
             "output_attention_mask": output_attention_mask,
         }
     
     def teacher_forced_model_forward( self, 
         input_embeds,
         input_attention_mask,
-        output_embeds,
+        output_embeds_dec,
         output_attention_mask,
         **kwargs
     ):
         output = super().teacher_forced_model_forward(
             input_embeds = input_embeds,
             input_attention_mask = input_attention_mask,
-            output_embeds = output_embeds,
+            output_embeds_dec = output_embeds_dec,
             output_attention_mask = output_attention_mask,
         )
         return output
@@ -104,13 +103,13 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         self,
         input_embeds,
         input_attention_mask,
-        output_embeds,
+        output_embeds_dec,
         output_attention_mask,
     ):
         return {
             "inputs_embeds": input_embeds,
             "attention_mask": input_attention_mask,
-            "decoder_inputs_embeds": output_embeds,
+            "decoder_inputs_embeds": output_embeds_dec,
         }
         
     def return_output_dict(self, outputs) -> Dict[str, Any]:
@@ -155,6 +154,8 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         # eos_flags = torch.zeros(input_embeds.shape[0], 1, dtype=torch.bool).to(input_embeds)
         if output_embeds_enc is not None:
             output_embeds_encs = output_embeds_enc.requires_grad_(True)
+        else:
+            output_embeds_encs = None
         output_embeds_decs = output_embeds_dec.requires_grad_(True)
         
         
@@ -185,7 +186,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         return {
             "input_embeds": input_embeds,
             "input_attention_mask": input_attention_mask,
-            "output_embeds": output_embeds_decs[:, :step + preprend_length],
+            "output_embeds_dec": output_embeds_decs[:, :step + preprend_length],
         }
         
     def post_one_step_seq_forward(
@@ -199,14 +200,14 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         **kwargs,
     ):
         
-        ids[:, step] = current_output['id'].reshape(-1)
+        ids[:, step] = current_output['id'].squeeze(1)
         #TODO: MIGHT UNCOMMENT LATER FOR VARIABLE LENGTH OUTPUTS
         # p_not_eoss.append( (1 - current_output['p_eos']) * p_not_eoss[step])
         # eos_flags = torch.logical_or(eos_flags, current_output['eos_flag'].reshape(-1, 1))
         # quantization_loss += (current_output['quantization_loss'] * torch.logical_not(eos_flags).float())
         # quantization_loss = quantization_loss * (current_output['quantization_loss'] * torch.logical_not(eos_flags))
         quantization_loss = current_output['quantization_loss'] # THIS IS A DUMMY LINE
-        if self.output_prepending_embeds_enc is None and step == 0:
+        if step == 0:
             output_embeds_encs = current_output['vector_encoder']
         else:
             output_embeds_encs = torch.cat((output_embeds_encs, current_output['vector_encoder']), dim=1)

@@ -122,14 +122,14 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         self,
         input_embeds,
         input_attention_mask,
-        output_embeds,
+        output_embeds_dec,
         output_attention_mask,
         **kwargs
     ):
         return {
             "inputs_embeds": input_embeds,
             "attention_mask": input_attention_mask,
-            "decoder_inputs_embeds": output_embeds,
+            "decoder_inputs_embeds": output_embeds_dec,
             "decoder_attention_mask": output_attention_mask,            
         }
         
@@ -145,7 +145,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         outputs = super().teacher_forced_model_forward(
             input_embeds = input_embeds,
             input_attention_mask = input_attention_mask,
-            output_embeds = output_embeds_dec,
+            output_embeds_dec = output_embeds_dec,
             output_attention_mask = output_attention_mask,
             output_ids = output_ids
         )
@@ -244,7 +244,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         return {
             "input_embeds": input_embeds,
             "input_attention_mask": input_attention_mask,
-            "output_embeds": output_embeds_decs[:, :step + preprend_length],
+            "output_embeds_dec": output_embeds_decs[:, :step + preprend_length],
             "output_attention_mask": output_attention_masks[:, :step + preprend_length],
         }
         
@@ -252,7 +252,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         self,
         input_embeds,
         input_attention_mask, 
-        output_embeds,
+        output_embeds_dec,
         output_attention_mask,
         last_step_states={},
     ):
@@ -262,7 +262,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         seq_forward_output = super().one_step_sequential_forward(
             input_embeds = input_embeds,
             input_attention_mask = input_attention_mask,
-            output_embeds = output_embeds,
+            output_embeds_dec = output_embeds_dec,
             output_attention_mask = output_attention_mask,
             last_step_states = last_step_states,
         )

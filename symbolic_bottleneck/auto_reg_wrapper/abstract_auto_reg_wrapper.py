@@ -94,7 +94,7 @@ class AbstractAutoRegWrapper(Module):
         self,
         input_embeds,
         input_attention_mask, 
-        output_embeds,
+        output_embeds_dec,
         output_attention_mask,
     ) -> Dict[str, Any]:
         
@@ -172,7 +172,7 @@ class AbstractAutoRegWrapper(Module):
     def one_step_sequential_forward(
         self,
         input_embeds, 
-        output_embeds,
+        output_embeds_dec,
         input_attention_mask=None,
         output_attention_mask=None,
         last_step_states={},
@@ -184,7 +184,7 @@ class AbstractAutoRegWrapper(Module):
         args_for_seq_forward = self.prepare_args_for_model_forward(
             input_embeds=input_embeds,
             input_attention_mask=input_attention_mask,
-            output_embeds=output_embeds,
+            output_embeds_dec=output_embeds_dec,
             output_attention_mask=output_attention_mask,
         )
         
@@ -240,7 +240,7 @@ class AbstractAutoRegWrapper(Module):
         output_attention_mask = None,
     ):
         
-        preprend_length = output_embeds_enc.shape[1]
+        preprend_length = output_embeds_dec.shape[1]
           
         seq_forward_params = self.prepare_seq_forward_params(
             input_embeds = input_embeds,
