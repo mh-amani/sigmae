@@ -21,7 +21,7 @@ callbacks:
 
 data:
   supervision_ratio: [0, 1.00]
-  batch_size: 210
+  batch_size: 32
 
 model:
   optimizer:
@@ -31,7 +31,7 @@ model:
     # to be manually set
     x_vocab_size: 17
     z_patch_size: 16
-    max_x_length: 20
+    max_x_length: 10
     max_z_length: 50
     image_size: 28
     d_model: 512
