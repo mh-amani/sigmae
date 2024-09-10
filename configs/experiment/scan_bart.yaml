@@ -31,7 +31,7 @@ model:
     # to be manually set
     x_vocab_size: 17
     z_vocab_size: 10
-    max_x_length: 20
+    max_x_length: 40
     max_z_length: 60
     d_model: 512
   
@@ -43,7 +43,7 @@ model:
           output: ${model.model_params.max_z_length}
       model:
         config:
-          vocab_size: ${model.model_params.x_vocab_size}
+          vocab_size: ${add_int:${model.model_params.x_vocab_size}, ${model.model_params.z_vocab_size}}
           # max_position_embeddings: ${input_max_position_embeddings}
       tokenizer:
         _target_: transformers.AutoTokenizer.from_pretrained
@@ -57,7 +57,7 @@ model:
           output: ${model.model_params.max_x_length}
       model:
         config:
-          vocab_size: ${model.model_params.z_vocab_size}
+          vocab_size: ${add_int:${model.model_params.z_vocab_size}, ${model.model_params.x_vocab_size}}
           # max_position_embeddings: ${output_max_position_embeddings}
       tokenizer:
         _target_: transformers.AutoTokenizer.from_pretrained

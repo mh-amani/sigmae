@@ -245,7 +245,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             "input_embeds": input_embeds,
             "input_attention_mask": input_attention_mask,
             "output_embeds_dec": output_embeds_decs[:, :step + preprend_length],
-            "output_attention_mask": output_attention_masks[:, :step + preprend_length],
+            "output_attention_mask": output_attention_masks[:, :step + preprend_length]>0,
         }
         
     def one_step_sequential_forward(
@@ -395,7 +395,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         if self.config['soft_average']['p_eos_forward']:
             return p_not_eos
         elif self.config['soft_average']['p_eos_backward']:
-            return true_attention_mask + p_not_eos - p_not_eos.detach()
+            return true_attention_mask + (p_not_eos - p_not_eos.detach())
         else:
             return true_attention_mask
         # what about eos_flags * p_not_eos?

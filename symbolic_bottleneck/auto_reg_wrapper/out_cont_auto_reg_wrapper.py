@@ -30,6 +30,8 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         
         
         self.output_prepending_embeds_dec = self.config.get("output_prepending_embeds_dec", None)
+        if self.output_prepending_embeds_dec is not None:
+            self.output_prepending_embeds_dec.requires_grad_(True)
         assert self.output_prepending_embeds_dec is not None, "output_prepending_embeds_dec should be provided"
     
     def prepare_inputs(
@@ -54,10 +56,10 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         assert (output_ids is None), 'for continuous output, output_ids should not be provided'
         assert output_embeds_enc is None, 'output_embeds_enc should not be provided, only the output_embeds_dec should be provided in case of teacher forcing'
         if output_embeds_dec is None:
-            output_embeds_dec = torch.tensor(self.output_prepending_embeds_dec).repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device).requires_grad_(True)
+            output_embeds_dec = self.output_prepending_embeds_dec.repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device)
         else:
             # prepend the output_embeds_dec with the output_prepending_embeds_dec
-            output_embeds_dec = torch.cat((torch.tensor(self.output_prepending_embeds_dec).repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device), output_embeds_dec), dim=1)
+            output_embeds_dec = torch.cat((self.output_prepending_embeds_dec.repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device), output_embeds_dec), dim=1)
 
         return {
             "input_ids": input_ids,

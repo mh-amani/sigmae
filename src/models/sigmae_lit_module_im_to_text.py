@@ -30,7 +30,7 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         # loss function is L1Loss
         self.criterion = torch.nn.L1Loss(reduction='mean')
         self.loss = MeanMetric()
-        self.automatic_optimization = False
+        # self.automatic_optimization = False
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.processor_z = hydra.utils.instantiate(models_config.sequence_model_zx.processor, _recursive_=False)
@@ -51,16 +51,12 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         uni_channel_z = z[:, 0:1, ...]
         z_patches = self.unfold(uni_channel_z).permute(0, 2, 1)
         z_patches_embeds = self.discretizer_z.decoder_embedding(z_patches)
-        zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=z, # z_embeds_dec=z_patches_embeds, 
+        zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=z,  z_embeds_dec=z_patches_embeds, 
                                                             z_attention_mask=torch.ones_like(z_patches, dtype=torch.bool),
-                                                            teacher_force_z=False)
+                                                            teacher_force_z=True)
         outputs['zxz'] = zxz_outputs
         outputs['zxz']['logit'] = zxz_outputs['id_z']
         labels['zxz'] = z_patches
-
-        # debug the nan loss for zx problem.
-        # outputs = self.auto_reg_wrapped_model_zx(input_embeds_enc=z,)
-        # labels = z_patches
 
         return outputs, labels
 
@@ -79,35 +75,42 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         x, z, data_type = batch['x'], batch['z'], batch['data_type']
         data_type = torch.all(data_type, dim=0)
         unprocessed_z = batch['z_unrpocessed'].permute(0, 3, 1, 2)[:, 0:1, ...]
-        # forward pass
+
         outputs, labels = self.forward(x, z, data_type, stage=stage)
 
-
-        output_image = self.fold(outputs['zxz']['logit'].permute(0, 2, 1))
+        output_image = self.fold(outputs['zxz']['logit'][:, :-1, ...].permute(0, 2, 1))
 
         # compute losses, predictions and update metrics
 
-        loss = self.criterion(outputs['zxz']['logit'], labels['zxz'])
-        # loss= self.criterion(output_image, unprocessed_z/255)
+        # loss = self.criterion(outputs['zxz']['logit'], labels['zxz'])
+        loss= self.criterion(output_image, unprocessed_z/255)
         self.loss.update(loss)
 
         # log 10 images every epoch
-        images_to_log = 10
         if self.current_epoch % 2 == 0:
             self.logger.log_image(key='input_image', images=[unprocessed_z[i] for i in range(10)])
             self.logger.log_image(key='output_image', images=[output_image[i] for i in range(10)])
         return loss
     
-    def training_step(self, batch, batch_idx):
+    # def training_step(self, batch, batch_idx):
         
-        loss = self.model_step(batch, stage='learn')
-        opt = self.optimizers()
-        # scale losses by 1/N (for N batches of gradient accumulation)
-        self.manual_backward(loss)
+    #     x, z, data_type = batch['x'], batch['z'], batch['data_type']
+    #     data_type = torch.all(data_type, dim=0)
+    #     unprocessed_z = batch['z_unrpocessed'].permute(0, 3, 1, 2)[:, 0:1, ...]
+    #     # forward pass
+    #     # torch.autograd.set_detect_anomaly(True)
+    #     outputs, labels = self.forward(x, z, data_type, stage='train')
+    #     labels = torch.zeros_like(outputs['vector_encoder'])
+    #     loss = torch.nn.functional.mse_loss(outputs['vector_encoder'], labels)
+        
+    #     # loss = self.model_step(batch, stage='learn')
+    #     opt = self.optimizers()
+    #     # scale losses by 1/N (for N batches of gradient accumulation)
+    #     self.manual_backward(loss)
 
-        # accumulate gradients of N batches
-        opt.step()
-        opt.zero_grad()
+    #     # accumulate gradients of N batches
+    #     opt.step()
+    #     opt.zero_grad()
 
         
 
