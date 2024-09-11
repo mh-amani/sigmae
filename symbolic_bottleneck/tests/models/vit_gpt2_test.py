@@ -49,13 +49,11 @@ def UnwrappedViTGPT2Test():
     print("logits are the same:", torch.allclose(discretized_output, output_model.logits, atol=1e-1))
 
 
-def UnwrappedMBartTest():
-    pass
 
 
 
 # Check the wrapped models
-def AutoRegWrappedBartTest():
+def AutoRegVitGPT2Test():
     from copy import deepcopy
     im2txt_discretizer_config = deepcopy(discretizer_dec_config)
     txt2_im_discretizer_config = {
@@ -73,7 +71,6 @@ def AutoRegWrappedBartTest():
     # # get the models and the discretizers
     
     im2txt_model, im2txt_vector_model, _, im2txt_decoder_embedding, im2txt_linear_head = UnWrappedVITGPT2(config_vit_gpt2, im2txt_discretizer_config)
-    breakpoint()
     image_processor = AutoImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
     im2txt_tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
     
@@ -96,17 +93,17 @@ def AutoRegWrappedBartTest():
     txt2_im_unembedding_dim = 7*7 #size of a image patch
     txt2_im_embed_dim = txt2im_vector_model.config.d_model
     txt2im_hidden_size = txt2im_vector_model.config.hidden_size
-    txt2im_linear_head = torch.nn.Linear(txt2im_hidden_size, txt2_im_unembedding_dim)
+    txt2im_linear_head = torch.nn.Linear(txt2im_hidden_size, txt2im_hidden_size)
 
-    txt2im_dimensions = {'decoder_embedding_dim': txt2_im_embed_dim,
+    txt2im_dimensions = {'decoder_embedding_dim': txt2_im_embed_dim, "vocab_size": txt2im_hidden_size,
                     'encoder_embedding_dim': im2txt_embed_dim, 'unembedding_dim': txt2_im_unembedding_dim}
     
     im2txt_dimensions = {'decoder_embedding_dim': im2txt_embed_dim, 'vocab_size': im2txt_vocab_size, 
-                    'encoder_embedding_dim': im2txt_embed_dim, 'unembedding_dim': im2txt_vocab_size}
+                    'encoder_embedding_dim': im2txt_embed_dim}
     
     
-    output_prepending_embeds_enc = txt2im_decoder_embedding(torch.tensor([txt2im_tokenizer.bos_token_id]))
-    output_prepending_embeds_dec = im2txt_decoder_embedding(torch.tensor([im2txt_tokenizer.bos_token_id]))
+    output_prepending_embeds_dec = txt2im_decoder_embedding(torch.tensor([txt2im_tokenizer.bos_token_id]))
+    output_prepending_embeds_enc = im2txt_decoder_embedding(torch.tensor([im2txt_tokenizer.bos_token_id]))
     txt2im_disc_config = {'dimensions': txt2im_dimensions, 'encoder_embedding': None,
                           'decoder_embedding': None, 'linear_head': txt2im_linear_head}
     
@@ -218,7 +215,7 @@ def AutoRegWrappedMBartTest():
 
 def main():
     UnwrappedViTGPT2Test()
-    AutoRegWrappedBartTest()
+    AutoRegVitGPT2Test()
 
 if __name__ == "__main__":
     main()

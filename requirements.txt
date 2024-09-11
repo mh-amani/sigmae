@@ -35,3 +35,5 @@ transformers==4.32.0
 wandb==0.15.8
 sentencepiece==0.2.0
 # pynini==2.1.5
+soundfile==0.10.2.post1
+librosa==0.12.1

@@ -2,7 +2,10 @@ import torch
 from symbolic_bottleneck.utils import instantiate_from_config
 from transformers.models.vit.modeling_vit import ViTPatchEmbeddings
 from transformers.models.vision_encoder_decoder.modeling_vision_encoder_decoder import VisionEncoderDecoderModel
+from transformers import Wav2Vec2PreTrainedModel
+from transformers.models.wav2vec2.modeling_wav2vec2 import Wav2Vec2FeatureEncoder
 from copy import deepcopy
+
 def EncoderDecoderUnwrapperFromConfig(model_config, discretizer_enc_config, discretizer_dec_config):
     """
     Unwraps the encoder-decoder model to get the encoder and decoder weights.
@@ -60,7 +63,7 @@ def EncoderDecoderUnwrapper(enc_dec_model):
         decoder_embedding_weight: The decoder weights.
         linearhead_weight: The linear head weights.
     """
-    
+
     encoder_embedding = UnWrapEmbeddings( enc_dec_model.get_encoder())
     decoder_embedding = UnWrapEmbeddings(enc_dec_model.get_decoder())
     linear_head = UnWrapLinearHead(enc_dec_model)
@@ -99,22 +102,26 @@ def UnWrapEmbeddings(model):
         embedding.weight.data = embed_scale * embedding.weight.data
         return embedding
     
-    #some models don't have the get_input_embeddings method, so we need to handle this case
-    try:
-        embeddings = model.get_input_embeddings()
-    except:
-        #TODO: This is crazy but has to be done. For example, for some reason MBartEncoder has the embed_tokens attribute instead of get_input_embeddings
-        if hasattr(model, 'embed_tokens'):
-            embeddings = model.embed_tokens
-        else:
-            raise ValueError(
-                f"Model of type {type(model)} does not have the 'get_input_embeddings' and its input embeddings are not called 'embed tokens' - You need to implement the unwrapping for this type of embeddings"
-            )
+    #TODO: handling this sperately but we should look into how to make this better in the future
+    if isinstance(model, Wav2Vec2PreTrainedModel):
+        embeddings = model.feature_extractor 
+    else:
+        #some models don't have the get_input_embeddings method, so we need to handle this case
+        try:
+            embeddings = model.get_input_embeddings()
+        except:
+            #TODO: This is crazy but has to be done. For example, for some reason MBartEncoder has the embed_tokens attribute instead of get_input_embeddings
+            if hasattr(model, 'embed_tokens'):
+                embeddings = model.embed_tokens
+            else:
+                raise ValueError(
+                    f"Model of type {type(model)} does not have the 'get_input_embeddings' and its input embeddings are not called 'embed tokens' - You need to implement the unwrapping for this type of embeddings"
+                )
 
     if isinstance(embeddings, torch.nn.Embedding):
         embed_scale = model.embed_scale if hasattr(model, 'embed_scale') else 1.0
         return UnWrapDiscreteEmbeddings(embeddings, embed_scale)
-    elif isinstance(embeddings, ViTPatchEmbeddings):
+    elif isinstance(embeddings, ViTPatchEmbeddings) or isinstance(embeddings, Wav2Vec2FeatureEncoder):
         return UnWrapVitEmbeddings(embeddings)
     else:
         #puposely raise an error to make sure we don't forget to implement the unwrapping for this type of embeddings and avoid silent errors

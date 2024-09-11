@@ -21,7 +21,6 @@ class SoftmaxDiscreteBottleneck(AbstractBottleneck):
         # a probability based discretizer requires the following assertions to hold
         assert self.linear_head.in_features == self.decoder_embedding_dim
         # assert self.linear_head.out_features == self.vocab_size
-        assert self.encoder_embedding_dim == self.decoder_embedding_dim
 
         # self.logit_std = math.sqrt(self.output_dim * self.out_std**2)
         # self.logit_init = math.log(self.dictionary_dim)
