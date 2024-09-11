@@ -4,12 +4,13 @@ defaults:
  - override /model/components/sequence_models@models_config.sequence_model_zx: bart
  - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_xzx: bart_bart
  - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_zxz: bart_bart
- - override /model/components/discretizers@models_config.discretizer_x: softmaxDB
- - override /model/components/discretizers@models_config.discretizer_z: softmaxDB
+ - override /model/components/discretizers@models_config.discretizer_x: default
+ - override /model/components/discretizers@models_config.discretizer_z: default
 
 _target_: src.models.sigmae_lit_module_text_to_text.SigmaeLitModuleTextToText
 
 models_config:
+  inherit_model_embedding_weights_for_discretizers: true
   sequence_model_xz: 
     config:
       max_lengths:

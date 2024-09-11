@@ -181,6 +181,28 @@ class SigmaeLitModuleBase(LightningModule):
             }
         return {"optimizer": optimizer}
 
-
+    # Utility function to cleanly set the embedding or linear layer weights from the source model
+    def _set_discretizer_weights(self, target, source, clone=True):
+        """
+        Sets the weights (and bias if applicable) of the target layer from the source layer.
+        Supports both Embedding and Linear layers.
+        
+        Args:
+            target (nn.Module): The target layer (embedding or linear) whose weights are being set.
+            source (nn.Module): The source layer from which to copy weights (and bias if applicable).
+            clone (bool): Whether to clone the weights and bias to avoid in-place modification.
+        """
+        # Handle the weights for embedding or linear layers
+        if isinstance(target, torch.nn.Embedding) or isinstance(target, torch.nn.Linear):
+            # For Embedding or Linear layer, handle .weight
+            vocab_size, embedding_dim = target.weight.shape
+            if clone:
+                target.weight.data = source.weight[:vocab_size, :embedding_dim].clone()
+            else:
+                target.weight.data = source.weight[:vocab_size, :embedding_dim]
+            # If the layer is Linear and has a bias term, copy the bias as well
+            if isinstance(target, torch.nn.Linear) and target.bias is not None:
+                target.bias.data = source.bias[:target.bias.shape[0]].clone() if clone else source.bias[:target.bias.shape[0]]
+                
 if __name__ == "__main__":
     _ = SigmaeLitModuleBase(None, None, None, None)

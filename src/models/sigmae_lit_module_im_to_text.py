@@ -21,7 +21,6 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
             optimizer,
             scheduler,
         )
-    
   
     def _initialize_hparams(self) -> None:
         pass
@@ -29,8 +28,19 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
     def _initialize_metrics(self) -> None:
         # loss function is L1Loss
         self.criterion = torch.nn.L1Loss(reduction='mean')
-        self.loss = MeanMetric()
-        # self.automatic_optimization = False
+
+        self.accuracies, self.losses = torch.nn.ModuleDict(), torch.nn.ModuleDict()
+        for split in ['learn', 'val', 'test']: # you can't use 'train' as a key ... it's a reserved word
+            self.accuracies.update({split: torch.nn.ModuleDict()})
+            self.losses.update({split: torch.nn.ModuleDict()})
+            for space in ['zxz']:
+                self.accuracies[split].update({space: torch.nn.ModuleDict()})
+                self.losses[split].update({space: torch.nn.ModuleDict()})
+                for medium in ['continous output']:
+                    # metric objects for calculating and averaging accuracy across batches
+                    self.accuracies[split][space].update({medium: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)})
+                    # for averaging loss across batches
+                    self.losses[split][space].update({medium: MeanMetric()})
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.processor_z = hydra.utils.instantiate(models_config.sequence_model_zx.processor, _recursive_=False)

@@ -1,7 +1,6 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 import torch
 import numpy as np
-from torch.nn import ModuleDict, Module
 from symbolic_bottleneck.auto_reg_wrapper import AbstractAutoRegWrapper
 
 class AutoRegWrapper(AbstractAutoRegWrapper):
@@ -245,7 +244,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             "input_embeds": input_embeds,
             "input_attention_mask": input_attention_mask,
             "output_embeds_dec": output_embeds_decs[:, :step + preprend_length],
-            "output_attention_mask": output_attention_masks[:, :step + preprend_length]>0,
+            "output_attention_mask": output_attention_masks[:, :step + preprend_length] > 0, # this is to make sure that the attention mask is binary, otherwise we had NAN in the loss! for longish sequences
         }
         
     def one_step_sequential_forward(

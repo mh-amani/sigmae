@@ -1,4 +1,4 @@
-from symbolic_bottleneck.auto_reg_wrapper import AbstractAutoRegWrapper
+from .auto_reg_wrapper import AbstractAutoRegWrapper
 import torch
 from typing import Dict, Any
 import numpy as np

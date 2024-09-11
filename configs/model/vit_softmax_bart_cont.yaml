@@ -12,8 +12,10 @@ _target_: src.models.sigmae_lit_module_im_to_text.SigmaeLitModuleImageToText
 #here z is the image and x is the text
 
 models_config:
-  #im2txt
-  sequence_model_xz: 
+
+  inherit_model_embedding_weights_for_discretizers: true
+
+  sequence_model_xz: #im2txt
     _target_: symbolic_bottleneck.auto_reg_wrapper.OutContAutoRegWrapper
     config:
       max_lengths:
@@ -37,7 +39,6 @@ models_config:
           decoder_embedding_dim: ${model.model_params.d_model}
           unembedding_dim: ${model.model_params.x_vocab_size}
           
-    
   discretizer_z:
     config:
       dimensions:

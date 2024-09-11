@@ -4,7 +4,9 @@ defaults:
   - example
   - override /data: text
   - override /data/dataset: text/scan_dataset
-  - override /model: bart_softmax_bart_times_two
+  - override /model: bart_bart_times_two
+  - override /model/components/discretizers@model.models_config.discretizer_x: default
+  - override /model/components/discretizers@model.models_config.discretizer_z: default
 
 trainer:
   min_epochs: 50
@@ -31,7 +33,7 @@ model:
     # to be manually set
     x_vocab_size: 17
     z_vocab_size: 10
-    max_x_length: 40
+    max_x_length: 12
     max_z_length: 60
     d_model: 512
   

@@ -25,7 +25,6 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
     def _initialize_hparams(self) -> None:
         self.usezxz_with_supervised_training = self.hparams.get('usezxz_with_supervised_training', False)
         self.usexzx_with_supervised_training = self.hparams.get('usexzx_with_supervised_training', False)
-        self.automatic_optimization = False
 
     def _initialize_metrics(self) -> None:
         # loss function
@@ -139,17 +138,6 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
 
         # loss = losses['xz']
         return loss
-        
-    def training_step(self, batch, batch_idx):
-        
-        loss = self.model_step(batch, stage='learn')
-        opt = self.optimizers()
-        # scale losses by 1/N (for N batches of gradient accumulation)
-        self.manual_backward(loss)
-
-        # accumulate gradients of N batches
-        opt.step()
-        opt.zero_grad()
 
     def _initialize_autoreg_wrapped_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.sequence_model_xz = hydra.utils.instantiate(models_config.sequence_model_xz.model)
@@ -163,20 +151,21 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
         # if discretizer_z_config.get('dimensions', None) is None:
         models_config.discretizer_z.pop('config')
         models_config.discretizer_x.pop('config')
+        import code
+        code.interact(local=locals())
         self.discretizer_z = hydra.utils.instantiate(models_config.discretizer_z, configs=discretizer_z_config)
         self.discretizer_x = hydra.utils.instantiate(models_config.discretizer_x, configs=discretizer_x_config)
         # make the embeddings of the sequence models the same as the embeddings of the discretizers
-        # if size match!
-        # Apply the weight setting for both discretizer_z and discretizer_x
-        # Encoder Embedding
-        self.set_weights(self.discretizer_z.encoder_embedding, self.sequence_model_zx_unwrapped['encoder_embedding'])
-        self.set_weights(self.discretizer_x.encoder_embedding, self.sequence_model_xz_unwrapped['encoder_embedding'])
-        # Decoder Embedding
-        self.set_weights(self.discretizer_z.decoder_embedding, self.sequence_model_xz_unwrapped['decoder_embedding'])
-        self.set_weights(self.discretizer_x.decoder_embedding, self.sequence_model_zx_unwrapped['decoder_embedding'])
-        # Linear Head (for the linear layers)
-        self.set_weights(self.discretizer_z.linear_head, self.sequence_model_xz_unwrapped['linear_head'])
-        self.set_weights(self.discretizer_x.linear_head, self.sequence_model_zx_unwrapped['linear_head'])
+        if models_config.get('inherit_model_embedding_weights_for_discretizers', False):
+            # Encoder Embedding
+            self._set_discretizer_weights(self.discretizer_z.encoder_embedding, self.sequence_model_zx_unwrapped['encoder_embedding'])
+            self._set_discretizer_weights(self.discretizer_x.encoder_embedding, self.sequence_model_xz_unwrapped['encoder_embedding'])
+            # Decoder Embedding
+            self._set_discretizer_weights(self.discretizer_z.decoder_embedding, self.sequence_model_xz_unwrapped['decoder_embedding'])
+            self._set_discretizer_weights(self.discretizer_x.decoder_embedding, self.sequence_model_zx_unwrapped['decoder_embedding'])
+            # Linear Head (for the linear layers)
+            self._set_discretizer_weights(self.discretizer_z.linear_head, self.sequence_model_xz_unwrapped['linear_head'])
+            self._set_discretizer_weights(self.discretizer_x.linear_head, self.sequence_model_zx_unwrapped['linear_head'])
 
 
         models_config.sequence_model_xz.config.control_token_ids= {'input_pad_token_id': self.tokenizer_x.pad_token_id,
@@ -202,31 +191,6 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
                 vector_model=self.sequence_model_xz, input_discretizer=self.discretizer_x, output_discretizer=self.discretizer_z,)
         self.auto_reg_wrapped_model_zx = hydra.utils.instantiate(autoreg_sequence_model_zx, 
                 vector_model=self.sequence_model_zx, input_discretizer=self.discretizer_z, output_discretizer=self.discretizer_x,)
-
-    
-    # Utility function to cleanly set the embedding or linear layer weights from the source model
-    def set_weights(self, target, source, clone=True):
-        """
-        Sets the weights (and bias if applicable) of the target layer from the source layer.
-        Supports both Embedding and Linear layers.
-        
-        Args:
-            target (nn.Module): The target layer (embedding or linear) whose weights are being set.
-            source (nn.Module): The source layer from which to copy weights (and bias if applicable).
-            clone (bool): Whether to clone the weights and bias to avoid in-place modification.
-        """
-        # Handle the weights for embedding or linear layers
-        if isinstance(target, torch.nn.Embedding) or isinstance(target, torch.nn.Linear):
-            # For Embedding or Linear layer, handle .weight
-            vocab_size, embedding_dim = target.weight.shape
-            if clone:
-                target.weight.data = source.weight[:vocab_size, :embedding_dim].clone()
-            else:
-                target.weight.data = source.weight[:vocab_size, :embedding_dim]
-            
-            # If the layer is Linear and has a bias term, copy the bias as well
-            if isinstance(target, torch.nn.Linear) and target.bias is not None:
-                target.bias.data = source.bias[:target.bias.shape[0]].clone() if clone else source.bias[:target.bias.shape[0]]
 
 
     def _initialize_symbolic_autoencoder_wrappers(self, models_config: Dict[str, torch.nn.Module]) -> None:

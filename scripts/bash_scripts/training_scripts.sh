@@ -14,11 +14,15 @@ pwd
 #     model.optimizer.lr=0.0001 \
 #     data.batch_size=512
 
+
+
 # unsupervised scan zxz to 100% accuracy
 python ./src/train.py \
     experiment=scan_bart \
-    trainer.min_epochs=50 \
-    trainer.max_epochs=100 \
+    model/components/discretizers@model.models_config.discretizer_x=gumbelDB \
+    model/components/discretizers@model.models_config.discretizer_z=gumbelDB \
+    trainer.min_epochs=500 \
+    trainer.max_epochs=10000 \
     data.supervision_ratio=[0.0,1.0] \
     model.optimizer.lr=0.0001 \
-    data.batch_size=210
+    data.batch_size=128

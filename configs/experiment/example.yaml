@@ -5,8 +5,9 @@
 
 defaults:
   # - override /data: default
+  - /model/components/discretizers@model.model_params.discretizer: default
   - override /data/dataset: text/scan_dataset # text/scan_dataset or text/cogs_dataset
-  - override /model: bart_softmax_bart_times_two
+  - override /model: bart_bart_times_two
   # - override /callbacks: default
   # - override /trainer: default
 

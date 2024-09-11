@@ -21,7 +21,7 @@ callbacks:
 
 data:
   supervision_ratio: [0, 1.00]
-  batch_size: 32
+  batch_size: 128
 
 model:
   optimizer:
