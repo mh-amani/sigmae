@@ -15,7 +15,7 @@ def UnwrappedAudioEncDecTest():
     model, vector_model, encoder_embedding, decoder_embedding, linear_head = UnWrappedWav2Vec(config_wav2vec_gpt, discretizer_dec_config )
     model.eval()
     vector_model.eval()
-    
+    breakpoint()
     audio_processor = processor = AutoProcessor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
     tokenizer = audio_processor.tokenizer
     ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

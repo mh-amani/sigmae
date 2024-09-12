@@ -1,0 +1,8 @@
+defaults: 
+  - default
+
+dataset_name_or_path: timit_asr
+data_dir: /dlabscratch1/baldwin/sigmae/data/timit
+
+input_label: 'text'
+output_label: 'audio'
