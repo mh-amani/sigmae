@@ -10,6 +10,7 @@ class IdentityBottleneck(AbstractBottleneck):
         self._initialize_output_head()
         
     def _initialize_output_head(self):
+        # let's add an activation function to the output head...
         self.output_head = self._instantiate_embedding(self.vocab_size, self.unembedding_dim)
         self.output_head.requires_grad_(self.config.get('output_head_trainable', True))
         torch.nn.init.normal_(self.output_head.weight, mean=0, std=1/math.sqrt(self.unembedding_dim * self.vocab_size))

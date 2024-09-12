@@ -44,6 +44,7 @@ models_config:
       dimensions:
         encoder_embedding_dim: ${model.model_params.d_model}
         decoder_embedding_dim: ${model.model_params.d_model}
-        unembedding_dim: ${model.model_params.z_patch_size}
+        unembedding_dim: ${mult_int:${model.model_params.z_patch_size},3} #3 channels
+        vocab_size: ${mult_int:${model.model_params.z_patch_size},3} #3 channels
     
     

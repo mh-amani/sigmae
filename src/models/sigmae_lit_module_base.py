@@ -206,3 +206,38 @@ class SigmaeLitModuleBase(LightningModule):
                 
 if __name__ == "__main__":
     _ = SigmaeLitModuleBase(None, None, None, None)
+
+
+
+
+# to do manual gradient and peek into the grad
+
+    # def training_step(self, batch, batch_idx):
+        
+    #     x, z, data_type = batch['x'], batch['z'], batch['data_type']
+    #     data_type = torch.all(data_type, dim=0)
+    #     unprocessed_z = batch['z_unrpocessed'].permute(0, 3, 1, 2)[:, 0:1, ...]
+    #     # forward pass
+    #     # torch.autograd.set_detect_anomaly(True)
+    #     outputs, labels = self.forward(x, z, data_type, stage='train')
+    #     labels = torch.zeros_like(outputs['vector_encoder'])
+    #     loss = torch.nn.functional.mse_loss(outputs['vector_encoder'], labels)
+        
+    #     # loss = self.model_step(batch, stage='learn')
+    #     opt = self.optimizers()
+    #     # scale losses by 1/N (for N batches of gradient accumulation)
+    #     self.manual_backward(loss)
+
+    #     # accumulate gradients of N batches
+    #     opt.step()
+    #     opt.zero_grad()
+
+
+# then you can do:
+# # print out all param's grads. 
+# grad_dict = {}
+
+# # Loop over each named parameter in the model
+# for name, param in self.sequence_model_zx.named_parameters():
+#     if param.grad is not None:  # Check if the parameter has a gradient
+#         grad_dict[name] = param.grad.clone().detach()  # Clone the gradient to avoid any modifications

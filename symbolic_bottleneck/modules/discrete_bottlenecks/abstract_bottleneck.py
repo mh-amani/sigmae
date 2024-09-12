@@ -112,7 +112,7 @@ class AbstractBottleneck(nn.Module):
         else:
             raise ValueError('Either linear_head or both decoder_embedding_dim and unembedding_dim must be provided')
 
-    def forward(self, x,**kwargs):
+    def forward(self, x, **kwargs):
         continous_vector = self.linear_head(x)
         continous_vector = continous_vector * self.linear_head_scale
         # scores are between 0 and 1, and sum to 1 over the vocab dimension.
