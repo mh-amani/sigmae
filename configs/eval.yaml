@@ -2,13 +2,14 @@
 
 defaults:
   - _self_
-  - data: mnist # choose datamodule with `test_dataloader()` for evaluation
-  - model: mnist
+  - data: default
+  - model: default
+  - trainer: gpu
   - logger: null
-  - trainer: default
   - paths: default
   - extras: default
   - hydra: default
+  - experiment: null
 
 task_name: "eval"
 
@@ -16,3 +17,5 @@ tags: ["dev"]
 
 # passing checkpoint path is necessary for evaluation
 ckpt_path: ???
+
+overfit_batch: 0

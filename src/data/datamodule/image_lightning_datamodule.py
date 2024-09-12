@@ -27,13 +27,16 @@ class ImagePLDataModule(AbstractPLDataModule):
             **kwargs
         )
 
-    def setup(self, stage: Optional[str] = None) -> None:
+    def setup(self, stage: Optional[str] = None, processor_z=None) -> None:
         """
         Load data and set up datasets. This method is called on every GPU in distributed training.
 
         :param stage: Current stage of training ('fit', 'validate', 'test', or 'predict').
         """
-        self.processor_z = self.trainer.model.processor_z
+        if processor_z is not None:
+            self.processor_z = processor_z
+        else:
+            self.processor_z = self.trainer.model.processor_z
         self.processor_x = None
         self._setup(stage)
 

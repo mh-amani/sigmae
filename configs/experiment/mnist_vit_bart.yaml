@@ -18,6 +18,10 @@ callbacks:
     scheduler_z:
       hp_init: 1.0
       hp_end: 1.0
+  model_checkpoint:
+    monitor: ${model.model_params.monitor}
+  early_stopping:
+    monitor: ${model.model_params.monitor}
 
 data:
   supervision_ratio: [0, 1.00]
@@ -39,6 +43,7 @@ model:
       image_mean: 0.5
       image_std: 0.5
       image_size: 28
+    monitor: 'val/loss'
   
   models_config:
     sequence_model_xz:
@@ -48,3 +53,6 @@ model:
           # max_position_embeddings: ${input_max_position_embeddings}
 
       tokenizer: null
+  scheduler:
+    scheduler_config:
+      monitor: ${model.model_params.monitor}

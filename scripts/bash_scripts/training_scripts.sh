@@ -28,11 +28,14 @@ pwd
 #     data.batch_size=128
 
 
-# unsupervised image zxz to 100% accuracy
+# unsupervised image zxz
 python ./src/train.py \
     experiment=mnist_vit_bart \
+    model/components/discretizers@model.models_config.discretizer_x=softmaxDB \
+    model.model_params.x_vocab_size=10 \
+    model.model_params.max_x_length=12 \
     trainer.min_epochs=5 \
     trainer.max_epochs=10 \
     data.supervision_ratio=[0.0,1.0] \
     model.optimizer.lr=0.0001 \
-    data.batch_size=32
+    data.batch_size=200

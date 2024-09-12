@@ -20,6 +20,10 @@ callbacks:
     scheduler_z:
       hp_init: 1.0
       hp_end: 1.0
+  model_checkpoint:
+    monitor: ${model.model_params.monitor}
+  early_stopping:
+    monitor: ${model.model_params.monitor}
 
 data:
   supervision_ratio: [0, 1.00]
@@ -36,6 +40,7 @@ model:
     max_x_length: 12
     max_z_length: 60
     d_model: 512
+    monitor: 'val/zxz/loss'
   
   models_config:
     sequence_model_xz:
@@ -65,3 +70,7 @@ model:
         _target_: transformers.AutoTokenizer.from_pretrained
         pretrained_model_name_or_path: "./data/tokenizers/scan/actions"
         add_special_tokens: true
+
+  scheduler:
+    scheduler_config:
+      monitor: ${model.model_params.monitor}

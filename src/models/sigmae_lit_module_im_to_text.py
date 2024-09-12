@@ -3,9 +3,10 @@ import hydra
 from typing import Tuple, Dict
 from omegaconf import OmegaConf
 from torchmetrics import MaxMetric, MeanMetric
-from torchmetrics.image.fid import FrechetInceptionDistance
+from torchmetrics.image import StructuralSimilarityIndexMeasure
 from .sigmae_lit_module_base import SigmaeLitModuleBase
-
+from PIL import Image
+import numpy as np
 
 class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
     def __init__(
@@ -35,7 +36,7 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
                 self.losses[split].update({space: torch.nn.ModuleDict()})
                 for medium in ['continous output']:
                     # metric objects for calculating and averaging accuracy across batches
-                    self.accuracies[split][space].update({medium: FrechetInceptionDistance(normalize=True).to(self.device)})
+                    self.accuracies[split][space].update({medium: StructuralSimilarityIndexMeasure()})
                     # for averaging loss across batches
                     self.losses[split][space].update({medium: MeanMetric()})
 
@@ -86,12 +87,53 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         loss= self.criterion(output_image, unprocessed_z/255)
         self.losses[stage]['zxz']['continous output'](loss)
         self.accuracies[stage]['zxz']['continous output'](output_image, unprocessed_z/255)
-        self.accuracies[stage]['zxz']['continous output'](output_image.cpu(), unprocessed_z.cpu()/255)
-        # log 10 images every epoch
-        if self.current_epoch % 2 == 0:
-            self.logger.log_image(key='input_image', images=[unprocessed_z[i] for i in range(10)])
-            self.logger.log_image(key='output_image', images=[output_image[i] for i in range(10)])
+        
+        self._log_output_samples(output_image, unprocessed_z/255)
+
         return loss
+
+    def _log_output_samples(self, z_pred, z_true, freq=500, num_images=10) -> None:
+        # log 10 images every 2 epochs
+        if self.global_step % freq == 0:
+            combined_images = []
+            for i in range(num_images):
+                # Convert tensors or arrays to NumPy arrays if needed
+                true_img = z_true[i].detach().cpu().numpy() if not isinstance(z_true[i], np.ndarray) else z_true[i]
+                pred_img = z_pred[i].detach().cpu().numpy() if not isinstance(z_pred[i], np.ndarray) else z_pred[i]
+
+                # If the image is in format (C, H, W), convert it to (H, W, C)
+                if true_img.shape[0] == 3:  # Assuming color images with 3 channels
+                    true_img = np.transpose(true_img, (1, 2, 0))
+                if pred_img.shape[0] == 3:
+                    pred_img = np.transpose(pred_img, (1, 2, 0))
+
+                # Convert arrays to 0-255 range (assuming the input is float)
+                if true_img.max() <= 1.0:
+                    true_img = np.clip(true_img * 255.0, 0, 255).astype(np.uint8)
+                    pred_img = np.clip(pred_img * 255.0, 0, 255).astype(np.uint8)
+
+                # Convert NumPy arrays to PIL Images
+                true_img_pil = Image.fromarray(true_img)
+                pred_img_pil = Image.fromarray(pred_img)
+
+                # Combine the images horizontally
+                combined_img = Image.new('RGB', (true_img_pil.width + pred_img_pil.width, true_img_pil.height))
+                combined_img.paste(true_img_pil, (0, 0))
+                combined_img.paste(pred_img_pil, (true_img_pil.width, 0))
+
+                # Append the combined image
+                combined_images.append(combined_img)
+
+            # Log combined images (true + pred side by side)
+            self.logger.log_image(key='comparison_images', images=combined_images)
+
+
+    # def _log_output_samples(self, z_pred, z_true) -> None:
+    #     # log 10 images every epoch
+    #     if self.current_epoch % 2 == 0:
+    #         # log two images next to each other
+    #         self.logger.log_image(key='input_image', images=[z_true[i] for i in range(10)])
+    #         self.logger.log_image(key='output_image', images=[z_pred[i] for i in range(10)])
     
 
 
