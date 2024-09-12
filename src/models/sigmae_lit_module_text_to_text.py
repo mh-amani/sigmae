@@ -151,8 +151,6 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
         # if discretizer_z_config.get('dimensions', None) is None:
         models_config.discretizer_z.pop('config')
         models_config.discretizer_x.pop('config')
-        import code
-        code.interact(local=locals())
         self.discretizer_z = hydra.utils.instantiate(models_config.discretizer_z, configs=discretizer_z_config)
         self.discretizer_x = hydra.utils.instantiate(models_config.discretizer_x, configs=discretizer_x_config)
         # make the embeddings of the sequence models the same as the embeddings of the discretizers

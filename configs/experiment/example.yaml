@@ -4,12 +4,8 @@
 # python train.py experiment=example
 
 defaults:
-  # - override /data: default
-  - /model/components/discretizers@model.model_params.discretizer: default
   - override /data/dataset: text/scan_dataset # text/scan_dataset or text/cogs_dataset
   - override /model: bart_bart_times_two
-  # - override /callbacks: default
-  # - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters

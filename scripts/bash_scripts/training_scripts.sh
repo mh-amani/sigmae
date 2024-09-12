@@ -16,13 +16,23 @@ pwd
 
 
 
-# unsupervised scan zxz to 100% accuracy
+# # unsupervised scan zxz to 100% accuracy
+# python ./src/train.py \
+#     experiment=scan_bart \
+#     model/components/discretizers@model.models_config.discretizer_x=gumbelDB \
+#     model/components/discretizers@model.models_config.discretizer_z=gumbelDB \
+#     trainer.min_epochs=500 \
+#     trainer.max_epochs=10000 \
+#     data.supervision_ratio=[0.0,1.0] \
+#     model.optimizer.lr=0.0001 \
+#     data.batch_size=128
+
+
+# unsupervised image zxz to 100% accuracy
 python ./src/train.py \
-    experiment=scan_bart \
-    model/components/discretizers@model.models_config.discretizer_x=gumbelDB \
-    model/components/discretizers@model.models_config.discretizer_z=gumbelDB \
-    trainer.min_epochs=500 \
-    trainer.max_epochs=10000 \
+    experiment=mnist_vit_bart \
+    trainer.min_epochs=5 \
+    trainer.max_epochs=10 \
     data.supervision_ratio=[0.0,1.0] \
     model.optimizer.lr=0.0001 \
-    data.batch_size=128
+    data.batch_size=32
