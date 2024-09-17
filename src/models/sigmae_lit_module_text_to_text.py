@@ -41,9 +41,9 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
                 self.losses[split].update({space: torch.nn.ModuleDict()})
                 for medium in ['token', 'sequence']:
                     # metric objects for calculating and averaging accuracy across batches
-                    self.accuracies[split][space].update({medium: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)})
+                    self.accuracies[split][space].update(torch.nn.ModuleDict({medium: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)}))
                     # for averaging loss across batches
-                    self.losses[split][space].update({medium: MeanMetric()})
+                    self.losses[split][space].update(torch.nn.ModuleDict({medium: MeanMetric()}))
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.tokenizer_x = hydra.utils.instantiate(models_config.sequence_model_xz.tokenizer, _recursive_=False)

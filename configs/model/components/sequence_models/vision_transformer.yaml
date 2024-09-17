@@ -19,7 +19,7 @@ model:
       layer_norm_eps: 1e-12
       model_type: "vit"
       num_attention_heads: 8
-      num_channels: 3
+      num_channels: ${model.model_params.num_channels}
       num_hidden_layers: 8
       patch_size: ${model.model_params.z_patch_size}
       qkv_bias: true

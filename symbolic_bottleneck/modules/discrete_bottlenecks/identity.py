@@ -16,12 +16,9 @@ class IdentityBottleneck(AbstractBottleneck):
         torch.nn.init.normal_(self.output_head.weight, mean=0, std=1/math.sqrt(self.unembedding_dim * self.vocab_size))
         
     def discretize(self, x, **kwargs) -> dict:
-        
+        id = x
         vector_encoder = self.encoder_embedding_from_id(x)
-        vector_decoder = self.decoder_embedding_from_id(x)
-        
-        id = self.output_head(x)
-    
+        vector_decoder = self.decoder_embedding_from_id(x)    
         quantization_loss = torch.tensor(0.0).to(x)
         return {
             "id": id,

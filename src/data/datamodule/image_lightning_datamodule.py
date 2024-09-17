@@ -33,10 +33,11 @@ class ImagePLDataModule(AbstractPLDataModule):
 
         :param stage: Current stage of training ('fit', 'validate', 'test', or 'predict').
         """
-        if processor_z is not None:
-            self.processor_z = processor_z
-        else:
-            self.processor_z = self.trainer.model.processor_z
+        # if processor_z is not None:
+        #     self.processor_z = processor_z
+        # else:
+        #     self.processor_z = self.trainer.model.processor_z
+        self.processor_z = None
         self.processor_x = None
         self._setup(stage)
 
@@ -53,12 +54,15 @@ class ImagePLDataModule(AbstractPLDataModule):
             x_encodings = processor_x(x_items, padding=True, return_tensors="pt", add_special_tokens=True)
         else:
             x_encodings = torch.tensor(x_items)
-        z_encodings = processor_z(z_items, padding=True, return_tensors="pt", add_special_tokens=True)['pixel_values']
+        if processor_z is not None:
+            z_encodings = processor_z(z_items, padding=True, return_tensors="pt", add_special_tokens=True)['pixel_values']
+        else:
+            z_encodings = torch.tensor(np.array(z_items), dtype=torch.float32, device=x_encodings.device)
         
         return {
             'x': x_encodings,
             'z': z_encodings,
-            'z_unrpocessed': torch.tensor(np.array(z_items), dtype=torch.float32, device=z_encodings.device),
+            # 'z_unrpocessed': torch.tensor(np.array(z_items), dtype=torch.float32, device=z_encodings.device),
             'data_type': data_type,
             'ids': ids
         }
