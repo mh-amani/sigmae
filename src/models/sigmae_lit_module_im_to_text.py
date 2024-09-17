@@ -55,13 +55,22 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         labels = {}
         z_patches = self.unfold(z).permute(0, 2, 1)
         z_patches_embeds = self.discretizer_z.decoder_embedding(z_patches)
+        
+        z_attention_mask= None #torch.ones(z_patches.shape[0], z_patches.shape[1] + 1, dtype=torch.bool)
+        
+        # coin_flip = torch.rand(1)
+        # if coin_flip < 0.5:
+        #     z_attention_mask = torch.ones(z_patches.shape[0], z_patches.shape[1] + 1, dtype=torch.bool)
+        # else:
+        #     z_attention_mask = torch.zeros(z_patches.shape[0], z_patches.shape[1] + 1, dtype=torch.bool)
+        #     # z_attention_mask[:, -1] = True
+        
         zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=z,  z_embeds_dec=z_patches_embeds, 
-                                                            z_attention_mask=torch.ones_like(z_patches, dtype=torch.bool),
+                                                            z_attention_mask=z_attention_mask,
                                                             teacher_force_z=True)
         outputs['zxz'] = zxz_outputs
         outputs['zxz']['logit'] = zxz_outputs['id_z']
         labels['zxz'] = z_patches
-
         return outputs, labels
 
     def model_step(
@@ -89,7 +98,6 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         self.accuracies[stage]['zxz']['continous output'](output_image, unprocessed_z/255)
         
         self._log_output_samples(output_image, unprocessed_z/255)
-
         return loss
 
     def _log_output_samples(self, z_pred, z_true, freq=500, num_images=10) -> None:

@@ -20,13 +20,13 @@ class IdentityBottleneck(AbstractBottleneck):
         vector_encoder = self.encoder_embedding_from_id(x)
         vector_decoder = self.decoder_embedding_from_id(x)
         
-        id = self.output_head(x)
+
     
         quantization_loss = torch.tensor(0.0).to(x)
         return {
-            "id": id,
+            "id": x,
             "score": None,
-            "logit": x,
+            "logit": None,
             "vector_encoder": vector_encoder, 
             "vector_decoder": vector_decoder,
             "quantization_loss": quantization_loss
