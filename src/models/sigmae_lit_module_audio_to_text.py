@@ -26,21 +26,22 @@ class SigmaeLitModuleAudioToText(SigmaeLitModuleBase):
         pass
 
     def _initialize_metrics(self) -> None:
+        pass
         # loss function is L1Loss
-        self.criterion = torch.nn.L1Loss(reduction='mean')
+        # self.criterion = torch.nn.L1Loss(reduction='mean')
 
-        self.accuracies, self.losses = torch.nn.ModuleDict(), torch.nn.ModuleDict()
-        for split in ['learn', 'val', 'test']: # you can't use 'train' as a key ... it's a reserved word
-            self.accuracies.update({split: torch.nn.ModuleDict()})
-            self.losses.update({split: torch.nn.ModuleDict()})
-            for space in ['zxz']:
-                self.accuracies[split].update({space: torch.nn.ModuleDict()})
-                self.losses[split].update({space: torch.nn.ModuleDict()})
-                for medium in ['continous output']:
-                    # metric objects for calculating and averaging accuracy across batches
-                    self.accuracies[split][space].update({medium: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)})
-                    # for averaging loss across batches
-                    self.losses[split][space].update({medium: MeanMetric()})
+        # self.accuracies, self.losses = torch.nn.ModuleDict(), torch.nn.ModuleDict()
+        # for split in ['learn', 'val', 'test']: # you can't use 'train' as a key ... it's a reserved word
+        #     self.accuracies.update({split: torch.nn.ModuleDict()})
+        #     self.losses.update({split: torch.nn.ModuleDict()})
+        #     for space in ['zxz']:
+        #         self.accuracies[split].update({space: torch.nn.ModuleDict()})
+        #         self.losses[split].update({space: torch.nn.ModuleDict()})
+        #         for medium in ['continous output']:
+        #             # metric objects for calculating and averaging accuracy across batches
+        #             self.accuracies[split][space].update({medium: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)})
+        #             # for averaging loss across batches
+        #             self.losses[split][space].update({medium: MeanMetric()})
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.processor_z = hydra.utils.instantiate(models_config.sequence_model_zx.processor, _recursive_=False)
@@ -50,23 +51,25 @@ class SigmaeLitModuleAudioToText(SigmaeLitModuleBase):
         self.accuracies = torch.nn.ModuleDict()
         self.losses = torch.nn.ModuleDict()
 
-    def forward(self, x, z, data_type, stage='learn') -> torch.Tensor:
+    def forward(self, x_ids, x_mask, z_ids, z_mask, data_type, stage='learn') -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
 
         :param x: A tensor of images.
         :return: A tensor of logits.
         """
+        breakpoint()
         outputs = {}
         labels = {}
-        uni_channel_z = z[:, 0:1, ...]
-        z_patches = self.unfold(uni_channel_z).permute(0, 2, 1)
-        z_patches_embeds = self.discretizer_z.decoder_embedding(z_patches)
-        zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=z,  z_embeds_dec=z_patches_embeds, 
-                                                            z_attention_mask=torch.ones_like(z_patches, dtype=torch.bool),
+        #z is audio (already sort of embed)
+        breakpoint()
+        z_embeds = self.discretizer_z.decoder_embedding(z_ids)
+        breakpoint()
+        zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=z_ids,  z_embeds_dec=z_embeds, 
+                                                            z_attention_mask=z_mask,
                                                             teacher_force_z=True)
         outputs['zxz'] = zxz_outputs
         outputs['zxz']['logit'] = zxz_outputs['id_z']
-        labels['zxz'] = z_patches
+        labels['zxz'] = z_ids
 
         return outputs, labels
 
@@ -82,24 +85,25 @@ class SigmaeLitModuleAudioToText(SigmaeLitModuleBase):
             - A tensor of target labels.
         """
         # stage = self.trainer.state.stage._value_ # stages are 'fit', 'validate', 'test', 'predict', 'sanity_check'
-        x, z, data_type = batch['x'], batch['z'], batch['data_type']
+        x_ids, x_mask, z_ids, z_mask, data_type = batch['x_ids'], batch['x_mask'], batch['z_ids'], batch['z_mask'], batch['data_type']
         data_type = torch.all(data_type, dim=0)
-        unprocessed_z = batch['z_unrpocessed'].permute(0, 3, 1, 2)[:, 0:1, ...]
+        unprocessed_z = batch['z_unprocessed']
 
-        outputs, labels = self.forward(x, z, data_type, stage=stage)
+        # forward pass
+        outputs, labels = self.forward(x_ids, x_mask, z_ids, z_mask, data_type, stage=stage)
 
-        output_image = self.fold(outputs['zxz']['logit'][:, :-1, ...].permute(0, 2, 1))
+        #output_image = self.fold(outputs['zxz']['logit'][:, :-1, ...].permute(0, 2, 1))
 
         # compute losses, predictions and update metrics
 
-        # loss = self.criterion(outputs['zxz']['logit'], labels['zxz'])
-        loss= self.criterion(output_image, unprocessed_z/255)
+        loss = self.criterion(outputs['zxz']['logit'], labels['zxz'])
+        
         self.loss.update(loss)
 
         # log 10 images every epoch
-        if self.current_epoch % 2 == 0:
-            self.logger.log_image(key='input_image', images=[unprocessed_z[i] for i in range(10)])
-            self.logger.log_image(key='output_image', images=[output_image[i] for i in range(10)])
+        # if self.current_epoch % 2 == 0:
+        #     self.logger.log_image(key='input_image', images=[unprocessed_z[i] for i in range(10)])
+        #     self.logger.log_image(key='output_image', images=[output_image[i] for i in range(10)])
         return loss
     
     # def training_step(self, batch, batch_idx):

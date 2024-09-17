@@ -57,10 +57,14 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         assert output_embeds_enc is None, 'output_embeds_enc should not be provided, only the output_embeds_dec should be provided in case of teacher forcing'
         if output_embeds_dec is None:
             output_embeds_dec = self.output_prepending_embeds_dec.repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device)
+            
         else:
             # prepend the output_embeds_dec with the output_prepending_embeds_dec
             output_embeds_dec = torch.cat((self.output_prepending_embeds_dec.repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device), output_embeds_dec), dim=1)
-
+            
+        if output_attention_mask is None:
+            output_attention_mask = torch.ones(output_embeds_dec.shape[:2], dtype=torch.bool).to(output_embeds_dec.device)
+        
         return {
             "input_ids": input_ids,
             "input_attention_mask": input_attention_mask,
@@ -85,7 +89,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         )
         return output
         
-    def discretize_output(self, hidden_state, teacher_forced = False, output_ids=None, output_attention_mask=None):
+    def discretize_output(self, hidden_state, past_preds = None ,teacher_forced = False, output_ids=None, output_attention_mask=None):
         if teacher_forced:
             discretized_output = self.output_discretizer(
                 hidden_state,
@@ -95,6 +99,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         else:
             discretized_output = self.output_discretizer(
                 hidden_state,
+                past_preds = past_preds,
                 supervision=False,
             )
         
@@ -112,6 +117,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
             "inputs_embeds": input_embeds,
             "attention_mask": input_attention_mask,
             "decoder_inputs_embeds": output_embeds_dec,
+            "decoder_attention_mask": output_attention_mask,
         }
         
     def return_output_dict(self, outputs) -> Dict[str, Any]:
@@ -147,8 +153,8 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         # pad_embed_dec = self.output_discretizer.decoder_embedding_from_id(torch.tensor(self.control_token_ids['output_pad_token_id']).to(output_embeds_enc.device))
        
         # scores = torch.empty(input_embeds.shape[0], max_output_length-preprend_length, discretizer.vocab_size).to(input_embeds).fill_(0.0)
-        output_dim = self.output_discretizer.unembedding_dim
-        ids = torch.zeros(output_embeds_dec.shape[0], max_output_length-preprend_length, output_dim).to(input_embeds)
+        output_dim = self.output_discretizer.vocab_size
+        ids = torch.zeros(output_embeds_dec.shape[0], max_output_length-preprend_length, 2 ,output_dim).to(input_embeds)
         
         
         #TODO: MIGHT UNCOMMENT LATER FOR VARIABLE LENGTH OUTPUTS
@@ -182,6 +188,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         input_embeds,
         input_attention_mask,
         output_embeds_decs,
+        output_attention_mask,
         **kwargs
     ):
     
@@ -189,6 +196,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
             "input_embeds": input_embeds,
             "input_attention_mask": input_attention_mask,
             "output_embeds_dec": output_embeds_decs[:, :step + preprend_length],
+            "output_attention_mask": output_attention_mask
         }
         
     def post_one_step_seq_forward(
@@ -201,7 +209,6 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         output_embeds_decs,
         **kwargs,
     ):
-        
         ids[:, step] = current_output['id'].squeeze(1)
         #TODO: MIGHT UNCOMMENT LATER FOR VARIABLE LENGTH OUTPUTS
         # p_not_eoss.append( (1 - current_output['p_eos']) * p_not_eoss[step])

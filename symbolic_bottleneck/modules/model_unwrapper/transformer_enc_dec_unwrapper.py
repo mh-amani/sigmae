@@ -2,10 +2,11 @@ import torch
 from symbolic_bottleneck.utils import instantiate_from_config
 from transformers.models.vit.modeling_vit import ViTPatchEmbeddings
 from transformers.models.vision_encoder_decoder.modeling_vision_encoder_decoder import VisionEncoderDecoderModel
-from transformers import Wav2Vec2PreTrainedModel
+from transformers import Wav2Vec2PreTrainedModel, SpeechT5Model
 from transformers.models.wav2vec2.modeling_wav2vec2 import Wav2Vec2FeatureEncoder
+from symbolic_bottleneck.models.audio_encoder_decoder.t5_speech_wrappers import SpeechT5ModelWrapper
 from copy import deepcopy
-
+import warnings
 def EncoderDecoderUnwrapperFromConfig(model_config, discretizer_enc_config, discretizer_dec_config):
     """
     Unwraps the encoder-decoder model to get the encoder and decoder weights.
@@ -63,36 +64,38 @@ def EncoderDecoderUnwrapper(enc_dec_model):
         decoder_embedding_weight: The decoder weights.
         linearhead_weight: The linear head weights.
     """
-
     encoder_embedding = UnWrapEmbeddings( enc_dec_model.get_encoder())
     decoder_embedding = UnWrapEmbeddings(enc_dec_model.get_decoder())
     linear_head = UnWrapLinearHead(enc_dec_model)
     vector_model = UnWrapVectorModel(enc_dec_model)
+    
     return {'vector_model': vector_model, 'encoder_embedding': encoder_embedding, 
         'decoder_embedding': decoder_embedding, 'linear_head': linear_head} 
     
 def UnWrapVectorModel(model):
     vector_model = model.base_model
+    if isinstance(vector_model, SpeechT5Model):
+        vector_model = SpeechT5ModelWrapper(vector_model)
     return vector_model
-    
     
 def UnWrapLinearHead(model):
     linear_head = model.get_output_embeddings()
+
     #TODO: Is this necessary ? We should check if we can't replace this with a deepcopy or the embedding itself (a one-liner)
     if isinstance(linear_head, torch.nn.Linear):
         linear_head_weight = linear_head.weight.clone()
         linear_head = torch.nn.Linear(linear_head_weight.shape[1], linear_head_weight.shape[0])
         linear_head.weight.data = linear_head_weight
         return linear_head
-    
+    elif hasattr(model, "speech_decoder_postnet"):
+        return model.speech_decoder_postnet
     else:
         #puposely raise an error to make sure we don't forget to implement the unwrapping for this type of embeddings and avoid silent errors
-        raise ValueError(f"The linear head of type {type(linear_head)} is not supported - You need to implement the unwrapping for this type of embeddings")
+        raise ValueError(f"The linear head of type {type(linear_head)} is not supported - You need to implement the unwrapping for this type of head")
     
 def UnWrapEmbeddings(model):
     def UnWrapVitEmbeddings(embeddings):
-        # TODO: Is this really necessary ? We should check if we can just remove the deepcopy and it still works
-        return deepcopy(embeddings)
+        return embeddings
 
     def UnWrapDiscreteEmbeddings(embeddings, embed_scale):
         # TODO: Is this necessary ? We should check if we can't replace this with a deepcopy or the embedding itself (a one-liner)
@@ -113,20 +116,19 @@ def UnWrapEmbeddings(model):
             #TODO: This is crazy but has to be done. For example, for some reason MBartEncoder has the embed_tokens attribute instead of get_input_embeddings
             if hasattr(model, 'embed_tokens'):
                 embeddings = model.embed_tokens
+            elif hasattr(model, 'prenet'):
+                embeddings = model.prenet
             else:
                 raise ValueError(
                     f"Model of type {type(model)} does not have the 'get_input_embeddings' and its input embeddings are not called 'embed tokens' - You need to implement the unwrapping for this type of embeddings"
                 )
-
     if isinstance(embeddings, torch.nn.Embedding):
         embed_scale = model.embed_scale if hasattr(model, 'embed_scale') else 1.0
         return UnWrapDiscreteEmbeddings(embeddings, embed_scale)
-    elif isinstance(embeddings, ViTPatchEmbeddings) or isinstance(embeddings, Wav2Vec2FeatureEncoder):
-        return UnWrapVitEmbeddings(embeddings)
     else:
-        #puposely raise an error to make sure we don't forget to implement the unwrapping for this type of embeddings and avoid silent errors
-        raise ValueError(f"input embeddings of type {type(embeddings)} are not supported - You need to implement the unwrapping for this type of embeddings")
-
+        warnings.warn(f"you're not applying an embed_scale to your embeddings. Make sure you're doing this on purpose")
+        return UnWrapVitEmbeddings(embeddings)
+    
 
 #TODO: OLD EncoderDecoderUnwrapper. I can probably remove this
 # def EncoderDecoderUnwrapper(enc_dec_model):

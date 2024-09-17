@@ -10,7 +10,6 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
     
     REQUIRED_CONFIG_KEYS = [
         "control_token_ids.output_pad_token_id",
-        "control_token_ids.input_pad_token_id",
         "control_token_ids.output_unknown_token_id",
         "control_token_ids.output_eos_token_id",
         "soft_average",
@@ -62,7 +61,6 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
         output_embeds_dec=None,
         output_attention_mask=None,
     ):
-                
         assert (input_ids is not None) != (input_embeds_enc is not None), "Either input_ids or input_embeds should be provided"
         if not self.NO_INPUT_ATTENTION_MASK :
             assert (input_embeds_enc is not None and input_attention_mask is not None) or (input_embeds_enc is None and input_attention_mask is None), "input_embeds and input_attention_mask should be provided together or not at all. HINT: if you're model does not accept input_attention_mask, set the class variable NO_INPUT_ATTENTION_MASK to True"
@@ -71,8 +69,9 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
 
         if input_ids is not None:
             input_embeds_enc = self.input_discretizer.encoder_embedding_from_id(input_ids)
-            input_attention_mask = torch.logical_not(torch.eq(input_ids, self.control_token_ids['input_pad_token_id']))
-        
+            if input_attention_mask is None:
+                input_attention_mask = torch.logical_not(torch.eq(input_ids, self.control_token_ids['input_pad_token_id']))
+            
         if output_ids is not None:
             # setting the output encoder and decoder embeddings and attention mask, starting generation from these embeddings
             output_embeds_enc = self.output_discretizer.encoder_embedding_from_id(output_ids)
@@ -86,7 +85,7 @@ class AutoRegWrapper(AbstractAutoRegWrapper):
             output_ids = torch.from_numpy(np.array(self.output_prepending_ids)).repeat(input_embeds_enc.shape[0], 1).to(input_embeds_enc.device)
             output_embeds_enc = torch.tensor(self.output_prepending_embeds_enc).repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device)
             output_embeds_dec = torch.tensor(self.output_prepending_embeds_dec).repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device)
-            output_attention_mask = torch.ones(output_embeds_enc.shape[:2], dtype=torch.bool).to(output_embeds_enc.device)
+            output_attention_mask = torch.ones(output_embeds_dec.shape[:2], dtype=torch.bool).to(output_embeds_dec.device)
         
         return {
             "input_ids": input_ids,

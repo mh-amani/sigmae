@@ -4,7 +4,7 @@ defaults:
   - example
   - override /data: audio
   - override /data/dataset: audio/timit
-  - override /model: wav2vecgpt_softmax_bart_cont
+  - override /model: t5_speech_text
 
 trainer:
   min_epochs: 50

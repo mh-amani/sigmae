@@ -206,16 +206,17 @@ class AbstractAutoRegWrapper(Module):
         discretizer_output = self.discretize_output(output_embed, teacher_forced=False)
         
         return {
-            'id': discretizer_output['id'],
-            'score': discretizer_output['score'],
-            'logit': discretizer_output['logit'], 
-            'vector_encoder': discretizer_output['vector_encoder'],
-            'vector_decoder': discretizer_output['vector_decoder'], 
-            'quantization_loss': discretizer_output['quantization_loss'],
+            # 'id': discretizer_output['id'],
+            # 'score': discretizer_output['score'],
+            # 'logit': discretizer_output['logit'], 
+            # 'vector_encoder': discretizer_output['vector_encoder'],
+            # 'vector_decoder': discretizer_output['vector_decoder'], 
+            # 'quantization_loss': discretizer_output['quantization_loss'],
             'past_key_values': past_key_values,
             'encoder_last_hidden_state': encoder_last_hidden_state, 
             'hidden_state': hidden_state,
-            'encoder_attentions': encoder_attentions
+            'encoder_attentions': encoder_attentions,
+            **discretizer_output
         }
     
     @abstractmethod

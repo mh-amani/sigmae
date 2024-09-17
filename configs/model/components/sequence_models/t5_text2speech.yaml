@@ -1,0 +1,32 @@
+defaults:
+  - default
+  
+model:
+  _target_: transformers.SpeechT5ForTextToSpeech.from_pretrained
+  pretrained_model_name_or_path: "microsoft/speecht5_tts"
+
+
+# tokenizer:
+#   _target_: 'transformers.BartTokenizer.from_pretrained'
+#   pretrained_model_name_or_path: "facebook/bart-large"
+
+processor:
+  _target_: transformers.SpeechT5Processor.from_pretrained
+  pretrained_model_name_or_path: "microsoft/speecht5_tts"
+
+model_unwrapper: 
+  _target_: symbolic_bottleneck.modules.model_unwrapper.transformer_enc_dec_unwrapper.EncoderDecoderUnwrapper
+
+config:
+  config:
+  output_prepending_ids: null
+  max_lengths:
+    input: ???
+    output: ???
+  device: cpu
+  use_past_key_values: False
+  use_last_step_states: False
+  soft_average:
+    p_eos_backward: True
+    p_eos_forward: False 
+    word_embeds_with_scores_forward: True

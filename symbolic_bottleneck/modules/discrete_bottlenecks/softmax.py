@@ -19,7 +19,7 @@ class SoftmaxDiscreteBottleneck(AbstractBottleneck):
     def __init__(self, configs) -> None:
         super().__init__(configs)
         # a probability based discretizer requires the following assertions to hold
-        assert self.linear_head.in_features == self.decoder_embedding_dim
+        
         # assert self.linear_head.out_features == self.vocab_size
 
         # self.logit_std = math.sqrt(self.output_dim * self.out_std**2)

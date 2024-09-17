@@ -4,7 +4,8 @@ import torch
 from torch.nn import LayerNorm,BatchNorm1d
 import math
 from dataclasses import dataclass
-
+import warnings
+import inspect
 # discretizer_config = {
 #         '_target_': 'blocks.modules.discrete_bottlenecks.abstract_discrete_layer.AbstractBottleneck',
 #         'config': {
@@ -16,7 +17,7 @@ from dataclasses import dataclass
 #             'linear_head': None,
 #         }
 #     }
-
+SUPPORTED_TYPES_FOR_CHECK_AND_INIT = [nn.Embedding, nn.Linear]
 
 class AbstractBottleneck(nn.Module):
     DISCRETE_BOTTLENECK: bool = True
@@ -54,6 +55,12 @@ class AbstractBottleneck(nn.Module):
 
     
     def _check_consistency(self, embedding, embedding_dim, embedding_name):
+        
+        supported_type = any([isinstance(embedding, supported_type) for supported_type in SUPPORTED_TYPES_FOR_CHECK_AND_INIT])
+        
+        if not supported_type:
+            warnings.warn(f'consistancy check for {embedding_name} of type {type(embedding)} is not implemented. Skipping check.')
+            return 
                 
         if  self.vocab_size is not None and self.vocab_size != embedding.weight.shape[0]:
             raise ValueError(f'Inconsistent {"vocab_size"} for {embedding_name} embedding.' + 
@@ -68,33 +75,47 @@ class AbstractBottleneck(nn.Module):
                              f'Either provide only the embedding or provide the vocab_size and embedding_dim or make sure they are consistent.')
     
     def _instantiate_embedding(self, dim0, dim1):
+            
         embeddin_class = nn.Embedding if self.DISCRETE_BOTTLENECK else nn.Linear
         return embeddin_class(dim0, dim1)
     
     def _initialize_encoder_embedding(self):
         
+        supported_type = any([isinstance(self.config.get('encoder_embedding', None), supported_type) for supported_type in SUPPORTED_TYPES_FOR_CHECK_AND_INIT])
+      
         if self.config.get('encoder_embedding') is not None:
             self._check_consistency(self.config['encoder_embedding'], self.encoder_embedding_dim, 'encoder_embedding')
             self.encoder_embedding = self.config['encoder_embedding'].requires_grad_(self.config['encoder_embedding_trainable'])
-            self.encoder_embedding_dim = self.encoder_embedding.weight.shape[1]
-            self.vocab_size = self.encoder_embedding.weight.shape[0]
-            
+            if supported_type:
+                self.encoder_embedding_dim = self.encoder_embedding.weight.shape[1]
+                self.vocab_size = self.encoder_embedding.weight.shape[0]
+            elif not supported_type and (self.vocab_size is None or self.encoder_embedding_dim is None):
+                raise ValueError(f'vocab_size and encoder_embedding_dim must be passed if the encoder embedding you passed {type(self.encoder_embedding)} is not supported. Supported type {SUPPORTED_TYPES_FOR_CHECK_AND_INIT}')
+        
         elif self.encoder_embedding_dim is not None and self.vocab_size is not None:
             self.encoder_embedding = self._instantiate_embedding(self.vocab_size, self.encoder_embedding_dim)
             self.encoder_embedding.requires_grad_(self.config['encoder_embedding_trainable'])
             torch.nn.init.normal_(self.encoder_embedding.weight, mean=0, std=1/math.sqrt(self.encoder_embedding_dim * self.vocab_size))
+            
         else:
             raise ValueError(f"Either encoder_embedding (currently {self.config.get('encoder_embedding')}) or both encoder_embedding_dim (currently: {self.encoder_embedding_dim}) and {'vocab_size'} (currently {self.vocab_size}) must be provided")
 
     def _initialize_decoder_embedding(self):
-                
+        
+        supported_type = any([isinstance(self.config.get('decoder_embedding', None), supported_type) for supported_type in SUPPORTED_TYPES_FOR_CHECK_AND_INIT])
+
         if self.config.get('decoder_embedding') is not None:
             self._check_consistency(self.config['decoder_embedding'], self.decoder_embedding_dim, 'encoder_embedding')
             self.decoder_embedding = self.config['decoder_embedding'].requires_grad_(self.config['decoder_embedding_trainable'])
-            self.decoder_embedding_dim = self.decoder_embedding.weight.shape[1]
-            assert self.vocab_size == self.decoder_embedding.weight.shape[0], \
-                f'{"vocab_size"} and decoder_embedding do not match (can happen if your encoder_embedding and decoder_embedding have a different {"vocab_size"})'
-                
+            if supported_type:
+                self.decoder_embedding_dim = self.decoder_embedding.weight.shape[1]
+            elif not supported_type and self.decoder_embedding_dim is None:
+                raise ValueError(f'decoder_embedding_dim must be passed if the decoder embedding you passed {type(self.decoder_embedding)} is not supported. Supported type {SUPPORTED_TYPES_FOR_CHECK_AND_INIT}')
+            
+            if supported_type:
+                assert self.vocab_size == self.decoder_embedding.weight.shape[0], \
+                    f'{"vocab_size"} and decoder_embedding do not match (can happen if your encoder_embedding and decoder_embedding have a different {"vocab_size"})'
+        
         elif self.decoder_embedding_dim is not None and self.vocab_size is not None:
             self.decoder_embedding = self._instantiate_embedding(self.vocab_size, self.decoder_embedding_dim)
             self.decoder_embedding.requires_grad_(self.config['decoder_embedding_trainable'])
@@ -115,17 +136,29 @@ class AbstractBottleneck(nn.Module):
     def forward(self, x, **kwargs):
         continous_vector = self.linear_head(x)
         continous_vector = continous_vector * self.linear_head_scale
+     
         # scores are between 0 and 1, and sum to 1 over the vocab dimension.
         discrete_output  = self.discretize(continous_vector,**kwargs)
         # discrete_output usually has id, score, logit, quantized_vector, quantization_loss
         return discrete_output
 
-    def encoder_embedding_from_id(self, x):
-        embeds = self.encoder_embedding(x)
+    def encoder_embedding_from_id(self, x, attention_mask=None):
+        
+        #inspect signature of the forward method of the encoder_embedding
+        #for SpeechT5SpeechEncoderPrenet for example (size of attention mask changes with convolutions)
+        if "attention_mask" in inspect.signature(self.encoder_embedding.forward).parameters.keys():
+            embeds = self.encoder_embedding(x, attention_mask)
+        else:
+            embeds = self.encoder_embedding(x)
         return embeds
     
-    def decoder_embedding_from_id(self, x):
-        embeds = self.decoder_embedding(x)
+    def decoder_embedding_from_id(self, x, attention_mask=None):
+        #inspect signature of the forward method of the encoder_embedding
+        #for SpeechT5SpeechEncoderPrenet for example (size of attention mask changes with convolutions)
+        if "attention_mask" in inspect.signature(self.decoder_embedding.forward).parameters.keys():
+            embeds = self.decoder_embedding(x, attention_mask)
+        else:
+            embeds = self.decoder_embedding(x)
         return embeds
 
     @abstractmethod

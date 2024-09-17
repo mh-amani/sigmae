@@ -1,3 +1,4 @@
+# !!!! WE DON'T USE THIS FILE YET !!!!
 _target_: symbolic_bottleneck.auto_reg_wrapper.AudioInputAutoRegWrapper
 model:
   _target_: transformers.SpeechEncoderDecoderModel
