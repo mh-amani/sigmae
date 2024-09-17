@@ -6,7 +6,7 @@ _target_: src.data.datamodule.default_lightning_datamodule.DefaultPLDataModule
 batch_size: 128 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
 supervision_ratio: [0.05, 0.5] # [r(xz), r(z|not xz)]
 train_val_test_split: [55_000, 5_000, 10_000]
-num_workers: 8
+num_workers: 4
 pin_memory: False
 
 overfit_batch: ${overfit_batch} # if not None, only this number of batches will be used for training, same batch for val and test
