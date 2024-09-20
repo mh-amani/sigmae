@@ -13,12 +13,12 @@ model:
 processor:
   _target_: transformers.SpeechT5Processor.from_pretrained
   pretrained_model_name_or_path: "microsoft/speecht5_asr"
+  
 
 model_unwrapper: 
   _target_: symbolic_bottleneck.modules.model_unwrapper.transformer_enc_dec_unwrapper.EncoderDecoderUnwrapper
 
 config:
-  config:
   output_prepending_ids: null
   max_lengths:
     input: ???

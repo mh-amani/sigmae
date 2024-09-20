@@ -254,7 +254,7 @@ class AbstractAutoRegWrapper(Module):
         )
         
         step = 0
-        
+        self.step = step
         while step + preprend_length < self.current_max_output_length and self.should_continue_forward(**self.fetch_args_for_fn(self.should_continue_forward, **seq_forward_params)):
             
         
@@ -275,6 +275,7 @@ class AbstractAutoRegWrapper(Module):
             seq_forward_params = self.post_one_step_seq_forward(current_output, step ,**seq_forward_params)
             
             step += 1
+            self.step = step
 
 
         return_arguments = self.return_seq_forward_output_dict(step, preprend_length, **seq_forward_params)

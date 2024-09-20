@@ -10,18 +10,26 @@ trainer:
   min_epochs: 50
   max_epochs: 100
 
-callbacks:
-  supervision_scheduler:
-    scheduler_xz: 
-      hp_init: 0.0
-      hp_end: 0.0
-    scheduler_z:
-      hp_init: 1.0
-      hp_end: 1.0
-
 data:
   supervision_ratio: [0, 1.00]
-  batch_size: 128
+  batch_size: 10
+  max_audio_length: ${model.model_params.max_z_length}
+
+callbacks:
+  supervision_scheduler:
+      scheduler_xz: 
+        hp_init: 0.0
+        hp_end: 0.0
+      scheduler_z:
+        hp_init: 1.0
+        hp_end: 1.0
+  early_stopping:
+    monitor: "val/loss"
+    patience: 3
+    mode: "min"
+  model_checkpoint:
+    monitor: "val/loss"
+    mode: "min"
 
 model:
   optimizer:
@@ -29,22 +37,17 @@ model:
     
   model_params:
     # to be manually set
-    x_vocab_size: 17
-    z_patch_size: 16
+    teacher_force_prob: 0.5
+    x_vocab_size: 81
+    z_vocab_size: 81
     max_x_length: 10
-    max_z_length: 50
+    max_z_length: 258
+    num_mel_bins: 80
+    speaker_embedding_dim: 512
     # image_size: 28
-    d_model: 512
+    d_model: 768
     # processor:
     #   image_mean: 0.5
     #   image_std: 0.5
     #   image_size: 28
   
-  models_config:
-    sequence_model_xz:
-      model:
-        config:
-          vocab_size: ${model.model_params.x_vocab_size}
-          # max_position_embeddings: ${input_max_position_embeddings}
-
-      tokenizer: null

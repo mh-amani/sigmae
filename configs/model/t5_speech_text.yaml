@@ -1,28 +1,34 @@
 defaults: 
  - default
- - override /model/components/sequence_models@models_config.sequence_model_xz: t5_speech2text
- - override /model/components/sequence_models@models_config.sequence_model_zx: t5_text2speech
+ - override /model/components/sequence_models@models_config.sequence_model_xz: t5_text2speech
+ - override /model/components/sequence_models@models_config.sequence_model_zx: t5_speech2text 
  - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_xzx: bart_bart
  - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_zxz: bart_bart
  - override /model/components/discretizers@models_config.discretizer_x: softmaxDB
  - override /model/components/discretizers@models_config.discretizer_z: identity_audio
 
+_target_: src.models.sigmae_lit_module_audio_to_text.SigmaeLitModuleAudioToText
+
 
 models_config:
 
-  inherit_model_embedding_weights_for_discretizers: true
+  inherit_model_embedding_weights_for_discretizers: true    
+  
+  speaker_embedding_dim: ${model.model_params.speaker_embedding_dim}
 
-  sequence_model_xz: #im2txt
+  sequence_model_xz:
     _target_: symbolic_bottleneck.auto_reg_wrapper.AudioOutAutoRegWrapper
     config:
       max_lengths:
         input: ${model.model_params.max_x_length}
         output: ${model.model_params.max_z_length}
-    model:
-      config:
-        vocab_size: ${model.model_params.x_vocab_size}
+      vocoder: 
+        _target_: transformers.SpeechT5HifiGan.from_pretrained
+        pretrained_model_name_or_path: microsoft/speecht5_hifigan
+        device_map: cuda:0
 
   sequence_model_zx:
+    _target_: symbolic_bottleneck.auto_reg_wrapper.AudioInputAutoRegWrapper
     config:
       max_lengths:
         input: ${model.model_params.max_z_length}
@@ -30,16 +36,17 @@ models_config:
 
   discretizer_x:
     config:
-        dimensions:
-          vocab_size: ${model.model_params.x_vocab_size}
-          encoder_embedding_dim: ${model.model_params.d_model}
-          decoder_embedding_dim: ${model.model_params.d_model}
-          unembedding_dim: ${model.model_params.x_vocab_size}
-          
+      dimensions:
+        vocab_size: ${model.model_params.x_vocab_size}
+        encoder_embedding_dim: ${model.model_params.d_model}
+        decoder_embedding_dim: ${model.model_params.d_model}
+        
+
   discretizer_z:
     config:
+      reduction_factor: 2
       dimensions:
         encoder_embedding_dim: ${model.model_params.d_model}
         decoder_embedding_dim: ${model.model_params.d_model}
-        unembedding_dim: ${model.model_params.d_model}
-        vocab_size: ${model.model_params.d_model}
+        unembedding_dim: ${model.model_params.z_vocab_size}
+        vocab_size: ${model.model_params.num_mel_bins}

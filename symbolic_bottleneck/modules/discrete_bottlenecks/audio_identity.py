@@ -5,10 +5,11 @@ from transformers.models.speecht5.modeling_speecht5 import SpeechT5SpeechDecoder
 import inspect
 class AudioIdentityBottleneck(AbstractBottleneck):
     DISCRETE_BOTTLENECK: bool = False
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, configs):
+        super().__init__(configs)
         assert self.unembedding_dim is not None, "unembedding_dim must be provided"
         self.speaker_embedding = None
+        self.reduction_factor = self.config["reduction_factor"]
     #     self._initialize_output_head()
         # self.vocoder = config["vocoder"]
     # def _initialize_output_head(self):
@@ -34,15 +35,13 @@ class AudioIdentityBottleneck(AbstractBottleneck):
         self.speaker_embeddings = speaker_embeddings
     
     def forward(self, x, **kwargs):
-        
         additional_outputs = {}
-        
+  
         if isinstance(self.linear_head, SpeechT5SpeechDecoderPostnet): 
             #feat_out, postnet(feat_out), probout --> torch layers called
             #spectrum, decoder_hidden_states, prob_pause --> names of outputs
             #outputs_before_postnet,outputs_after_postnet,logits --> Alternate names for the same thing
             continous_vector, outputs_after_postnet, logits = self.linear_head(x)
-            continous_vector = continous_vector
             prob = torch.nn.functional.softmax(logits, dim=-1)
             sampled_eos = logits.sigmoid().sum(dim=-1) >= 0.5 #torch.bernoulli(prob[..., -1])
 
@@ -52,15 +51,14 @@ class AudioIdentityBottleneck(AbstractBottleneck):
                 "sampled_eos": sampled_eos,
                 "p_eos": p_eos,
                 "p_not_eos": p_not_eos,
-                "outputs_after_postnet": outputs_after_postnet,
-                "ouputs_before_postnet": continous_vector,
-                "logits": logits
+                "score": logits,
+                "logit": outputs_after_postnet,
             }
             
         else:
             continous_vector = self.linear_head(x)
             # for now, we are not using p_eos here
-            
+
         continous_vector = continous_vector * self.linear_head_scale
 
         # scores are between 0 and 1, and sum to 1 over the vocab dimension.
@@ -76,19 +74,29 @@ class AudioIdentityBottleneck(AbstractBottleneck):
     def decoder_embedding_from_id(self, x, attention_mask=None, past_preds=None):
         #inspect signature of the forward method of the encoder_embedding
         #for SpeechT5SpeechEncoderPrenet for example (size of attention mask changes with convolutions)
+        if x.device != self.speaker_embeddings.device:
+            self.speaker_embeddings = self.speaker_embeddings.to(x.device)
+        
         passed_full_hidden_states = past_preds is not None
+        start_idx = self.reduction_factor - 1
+        step_size = self.reduction_factor
+        bsz = x.size(0)
+        num_mel_bins = self.config["dimensions"]["vocab_size"]
         if passed_full_hidden_states:
-            hidden_states = torch.cat([past_preds[...,-1,:], x[..., -1,:].unsqueeze(-2)], dim=1).to(x.device)
+            hidden_states = torch.cat([past_preds[..., start_idx :: step_size,:].reshape(bsz,-1,num_mel_bins), x[..., start_idx :: step_size,:]], dim=1).to(x.device)
         else:
-            hidden_states = x[..., -1,:].unsqueeze(-2)
-        
+            hidden_states = x[..., start_idx :: step_size,:]
+            
+        if self.speaker_embeddings is not None and self.speaker_embeddings.size(0) == 1:
+            speaker_embeddings = self.speaker_embeddings.expand(bsz, -1)
+             
         if "attention_mask" in inspect.signature(self.decoder_embedding.forward).parameters.keys():
-            embeds = self.decoder_embedding(hidden_states, attention_mask=attention_mask, speaker_embeddings=self.speaker_embeddings)
+            embeds = self.decoder_embedding(hidden_states, attention_mask=attention_mask, speaker_embeddings=speaker_embeddings)
         else:
-            embeds = self.decoder_embedding(hidden_states, speaker_embeddings=self.speaker_embeddings)
+            embeds = self.decoder_embedding(hidden_states, speaker_embeddings=speaker_embeddings)
         
         if passed_full_hidden_states:
-            embeds = embeds[:, -1:]    
+            embeds = embeds[:, -1:] 
         
         return embeds
     
@@ -98,7 +106,6 @@ class AudioIdentityBottleneck(AbstractBottleneck):
         vector_decoder = self.decoder_embedding_from_id(x, attention_mask = kwargs.get('attention_mask', None), past_preds = kwargs.get('past_preds', None))
         
         quantization_loss = torch.tensor(0.0).to(x)
-                
         return {
             "id": x,
             "score": None,

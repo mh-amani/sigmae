@@ -2,6 +2,7 @@ from typing import Any, Dict, Optional
 import torch
 from src.data.datamodule.abstract_lightning_datamodule import AbstractPLDataModule
 import numpy as np
+from functools import partial
 
 class AudioPLDataModule(AbstractPLDataModule):
 
@@ -10,10 +11,12 @@ class AudioPLDataModule(AbstractPLDataModule):
         dataset: Dict[str, Any],
         supervision_ratio: list,
         data_type_sampling_probability: list,
+        max_audio_length: int,
         batch_size: int = 32,
         num_workers: int = 0,
         pin_memory: bool = False,
         seed: int = 42,
+        reduction_factor: int = 2,
         **kwargs
     ) -> None:
         super().__init__(
@@ -26,6 +29,10 @@ class AudioPLDataModule(AbstractPLDataModule):
             seed=seed,
             **kwargs
         )
+        
+        self.reduction_factor = reduction_factor
+        self.max_audio_length = max_audio_length
+        self.collate_fn = partial(self.collate_fn, reduction_factor=self.reduction_factor, max_audio_length=self.max_audio_length)
 
     def setup(self, stage: Optional[str] = None) -> None:
         """
@@ -39,8 +46,7 @@ class AudioPLDataModule(AbstractPLDataModule):
         self._setup(stage)
 
     @staticmethod
-    def collate_fn(batch, processor_z, processor_x=None):
-        
+    def collate_fn(batch, processor_z, reduction_factor ,processor_x=None, max_audio_length=None):
         x_items = [item['x']for item in batch]
         if isinstance(batch[0]["z"], dict):
             z_items = [item['z']["array"] for item in batch]
@@ -51,21 +57,40 @@ class AudioPLDataModule(AbstractPLDataModule):
         data_type = torch.tensor(data_type)
         ids = np.array([item['id'] for item in batch])
         ids = torch.tensor(ids)
-        if processor_x is not None:
-            x_encodings = processor_x(x_items, padding=True, return_tensors="pt", add_special_tokens=True)
-        elif isinstance(x_items[0], str):
-            x_encodings = None
-        else:
-            x_encodings = torch.tensor(x_items)
+        
+        processed_data = processor_z(
+            text= x_items,
+            audio_target= z_items,
+            sampling_rate= 16000,
+            return_attention_mask=True,
+            padding=True,
+            truncation=True,
+            max_length=max_audio_length,
+            return_tensors="pt",
+        )
+        
+        z_labels = processed_data['labels']
+        z_labels_attention_mask = processed_data['decoder_attention_mask']
+        to_remove = z_labels.shape[1] % reduction_factor
 
-        z_encodings = processor_z(z_items, padding=True, return_tensors="pt", add_special_tokens=True)
+        if to_remove != 0:
+            z_labels = z_labels[:, : - to_remove]
+            z_labels_attention_mask = z_labels_attention_mask[:, : - to_remove]
+                
+        z_encodings = processor_z(
+            audio = z_items,
+            padding=True,
+            sampling_rate = 16000 ,
+            return_tensors="pt",
+        )
         
         return {
-            'x_ids': x_encodings if x_encodings is None else x_encodings['input_ids'],
-            'x_mask': x_encodings['attention_mask'] if x_encodings is not None else None,
+            'x_ids': processed_data['input_ids'], # audio
+            'x_mask': processed_data['attention_mask'],
             'z_ids': z_encodings["input_values"],
             'z_mask': z_encodings['attention_mask'],
-            "z_unprocessed": z_items,
+            'z_labels': z_labels, #spectrogram
+            'z_labels_attention_mask': z_labels_attention_mask,
             'data_type': data_type,
             'ids': ids
         }

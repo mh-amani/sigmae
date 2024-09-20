@@ -24,7 +24,7 @@ class SymbolicAutoEncoderWrapper(Module):
     def forward(self, x_ids: torch.Tensor=None, x_attention_mask: torch.Tensor=None, x_embeds_enc: torch.Tensor=None,
                       y_prepending_ids: torch.Tensor=None, y_prepending_embeds_enc: torch.Tensor=None, y_prepending_embeds_dec: torch.Tensor=None,
                       z_ids: torch.Tensor=None, z_attention_mask: torch.Tensor=None, z_embeds_dec: torch.Tensor=None,
-                      teacher_force_z: bool=True, max_y_length=None, max_z_length=None) -> Dict[str, Any]:
+                      teacher_force_z: bool=True ,max_y_length=None, max_z_length=None, forced_z_length= None) -> Dict[str, Any]:
         """Perform a forward pass through the models x -> y -> z
 
         :param x: A tensor of images.
@@ -42,19 +42,24 @@ class SymbolicAutoEncoderWrapper(Module):
         y_inputs['vector_encoder'] = y_inputs['vector_encoder'] * y_inputs['output_attention_mask'].unsqueeze(-1) + \
             (1 - y_inputs['output_attention_mask']).detach().unsqueeze(-1) * y_inputs['vector_encoder'] # I don't even know what I'm doing here
 
+
         yz_outputs = self.model_y_to_z(
             input_embeds_enc=y_inputs['vector_encoder'], input_attention_mask=y_inputs['output_attention_mask']>0, 
             output_ids=z_ids, output_embeds_dec=z_embeds_dec, output_attention_mask=z_attention_mask,
-            teacher_force_output=teacher_force_z, max_output_length=max_z_length,)
+            teacher_force_output=teacher_force_z, max_output_length=max_z_length, forced_z_length=forced_z_length)
             
         quantization_loss = xy_outputs['quantization_loss'] + yz_outputs['quantization_loss']
         
-        return { 'id_y': xy_outputs['id'], 'id_z': yz_outputs['id'], 
+        
+        return { 
+                'id_y': xy_outputs['id'], 'id_z': yz_outputs['id'], 
                 'score_y': xy_outputs['score'], 'score_z': yz_outputs['score'],
                 'logit_y': xy_outputs['logit'], 'logit_z': yz_outputs['logit'],
                 'vector_encoder': yz_outputs['vector_encoder'], 'vector_decoder': yz_outputs['vector_decoder'],
                 'y_attention_mask': xy_outputs['output_attention_mask'], 'z_attention_mask': yz_outputs['output_attention_mask'],
-                'quantization_loss': quantization_loss,}
+                'quantization_loss': quantization_loss, "y_cross_attentions": xy_outputs.get('cross_attentions', None),
+                "z_cross_attentions": yz_outputs.get('cross_attentions', None)
+            }
                 # 'xy_outputs': xy_outputs, 'yz_outputs': yz_outputs,} # remove later... aligator
 
     def transform_xy_outputs_to_y_inputs(self, xy_outputs: Dict[str, Any]) -> Dict[str, Any]:

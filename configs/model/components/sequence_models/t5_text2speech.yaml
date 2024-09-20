@@ -5,7 +5,6 @@ model:
   _target_: transformers.SpeechT5ForTextToSpeech.from_pretrained
   pretrained_model_name_or_path: "microsoft/speecht5_tts"
 
-
 # tokenizer:
 #   _target_: 'transformers.BartTokenizer.from_pretrained'
 #   pretrained_model_name_or_path: "facebook/bart-large"

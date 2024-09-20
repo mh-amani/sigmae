@@ -64,7 +64,11 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
             
         if output_attention_mask is None:
             output_attention_mask = torch.ones(output_embeds_dec.shape[:2], dtype=torch.bool).to(output_embeds_dec.device)
+        elif output_attention_mask.shape[1] < output_embeds_dec.shape[1]:
+            #because of prepending ids
+            output_attention_mask = torch.cat((torch.ones(output_embeds_dec.shape[0], output_embeds_dec.shape[1] - output_attention_mask.shape[1], dtype=torch.bool).to(output_attention_mask.device), output_attention_mask), dim=1)
         
+       
         return {
             "input_ids": input_ids,
             "input_attention_mask": input_attention_mask,
@@ -154,7 +158,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
        
         # scores = torch.empty(input_embeds.shape[0], max_output_length-preprend_length, discretizer.vocab_size).to(input_embeds).fill_(0.0)
         output_dim = self.output_discretizer.vocab_size
-        ids = torch.zeros(output_embeds_dec.shape[0], max_output_length-preprend_length, 2 ,output_dim).to(input_embeds)
+        ids = torch.zeros(output_embeds_dec.shape[0], max_output_length-preprend_length ,output_dim).to(input_embeds)
         
         
         #TODO: MIGHT UNCOMMENT LATER FOR VARIABLE LENGTH OUTPUTS

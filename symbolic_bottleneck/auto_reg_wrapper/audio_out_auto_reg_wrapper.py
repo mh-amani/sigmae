@@ -35,22 +35,41 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
         input_attention_mask,
         output_embeds_dec,
         output_attention_mask,
-        output_ids
     ):
-         
         outputs = super().teacher_forced_model_forward(
             input_embeds = input_embeds,
             input_attention_mask = input_attention_mask,
             output_embeds_dec = output_embeds_dec,
             output_attention_mask = output_attention_mask,
-            output_ids = output_ids
         )
-
+        # batch_size, seq_len * reduction_factor, num_mel_bins
+        bsz, _, num_mel_bins = outputs['id'].shape
+        reduction_factor = self.output_discretizer.reduction_factor
+        
+        ids_device = outputs['id'].device
+        outputs['id'] = torch.cat([outputs['id'][:, i::reduction_factor, :].unsqueeze(-2) for i in range(0,reduction_factor)], dim=-2).to(ids_device)
+        
         outputs['eos_flag'] = outputs["sampled_eos"]
         outputs['p_not_eos'] = outputs["p_not_eos"]
         outputs['output_attention_mask'] = output_attention_mask
+        return outputs 
+    
+    def discretize_output(self, hidden_state, cross_attentions = None ,past_preds = None ,teacher_forced = False, output_ids=None, output_attention_mask=None):
+        if teacher_forced:
+            discretized_output = self.output_discretizer(
+                hidden_state,
+                supervision=True,
+            )
+            
+        else:
+            discretized_output = self.output_discretizer(
+                hidden_state,
+                past_preds = past_preds,
+                supervision=False,
+            )
         
-        return outputs    
+        discretized_output["cross_attentions"] = cross_attentions
+        return discretized_output   
     
     def one_step_sequential_forward(
         self,
@@ -61,7 +80,6 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
         output_attention_mask=None,
         last_step_states={},
     ) -> Dict[str, Any]:
-    
     
          # If you're using cached key values or encoder outputs or what not, you should pass them here. and you should check
         # the model source code to see if the gradients backpropagate through these values from next step or not.
@@ -113,7 +131,6 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
         p_eos = seq_forward_output["p_eos"]
 
         p_not_eos = seq_forward_output["p_not_eos"]
-        
         return({
             'id': seq_forward_output['id'],
             'score': seq_forward_output['score'],
@@ -128,29 +145,34 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
             'encoder_last_hidden_state': seq_forward_output["encoder_last_hidden_state"], 
             'hidden_state': seq_forward_output["hidden_state"],
             'encoder_attentions': seq_forward_output["encoder_attentions"],
+            'cross_attentions': output.cross_attentions,
         })
                 
      
     
     def return_output_dict(self, outputs) -> Dict[str, Any]:
+        outputs_before_postnet_spectrogram = outputs['id']
+        outputs_after_postnet_spectrogram = outputs["logit"]
+        scores_eos = outputs['score']
         #from (bsz,seq_len, reduction_factor, spectrogram_dim) to (bsz,seq_len * reduction_factor, spectrogram_dim)
         postnet_input = outputs['id'].flatten(1,2)
         #from (bsz,seq_len * reduction_factor, spectrogram_dim) to (bsz,seq_len * reduction_factor, spectrogram_dim)
         vector_encoder = self.output_discretizer.linear_head.postnet(postnet_input)
-        
-        vocoded_ids = self.vocoder(vector_encoder)
+        with torch.no_grad():
+            vocoded_ids = self.vocoder(vector_encoder)
         
         return {
             'id': vocoded_ids,
-            'score': None,
+            'score': scores_eos,
             'score_list': None,
-            'logit':None,
+            'logit': (outputs_before_postnet_spectrogram, outputs_after_postnet_spectrogram),
             'vector_encoder': vector_encoder,
             'vector_decoder': outputs['vector_decoder'],
             'output_attention_mask': outputs['output_attention_mask'],
             'eos_flag': outputs['eos_flag'],
             'p_not_eos': outputs['p_not_eos'],
-            'quantization_loss': outputs['quantization_loss']
+            'quantization_loss': outputs['quantization_loss'],
+            "cross_attentions": outputs["cross_attentions"],
         }
     
     def prepare_seq_forward_params(
@@ -173,14 +195,26 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
             max_output_length = max_output_length,
             preprend_length = preprend_length,
         )
+        output_dim = self.output_discretizer.vocab_size
+        ids = torch.zeros(output_embeds_dec.shape[0], max_output_length-preprend_length, self.output_discretizer.reduction_factor ,output_dim).to(input_embeds.device)
         
-        p_not_eoss = [torch.ones(input_embeds.shape[0], 1, requires_grad=True).to(input_embeds)]
-        eos_flags = torch.zeros(input_embeds.shape[0], 1, dtype=torch.bool).to(input_embeds)
+        p_not_eoss = [torch.ones(input_embeds.shape[0], 1, requires_grad=True).to(input_embeds.device)]
+        eos_flags = torch.zeros(input_embeds.shape[0], 1, dtype=torch.bool).to(input_embeds.device)
         
+        #scores are for p_eos, p_not_eos
+        scores = torch.zeros(input_embeds.shape[0], max_output_length-preprend_length, self.output_discretizer.reduction_factor).to(input_embeds.device)
+        #logits is outputs_after_postnet
+        logits = torch.zeros(input_embeds.shape[0], max_output_length-preprend_length, self.output_discretizer.reduction_factor, output_dim).to(input_embeds.device)
+
+        cross_attentions = None
+        
+        params["cross_attentions"] = cross_attentions
+        params["logits"] = logits
+        params["scores"] = scores
         params['p_not_eoss'] = p_not_eoss
         params['eos_flags'] = eos_flags
-        
-        output_attention_masks = output_attention_mask.float().requires_grad_(True)
+        params['ids'] = ids
+        output_attention_masks = output_attention_mask.float().requires_grad_(True).to(input_embeds.device)
         
         params['output_attention_masks'] = output_attention_masks
         
@@ -207,6 +241,10 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
         }
         
     def should_continue_forward(self, eos_flags):
+        
+        if self.forced_z_length is not None:
+            return self.step < self.forced_z_length
+        
         if torch.any(eos_flags):
             return False
      
@@ -219,12 +257,15 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
         current_output,
         step,
         ids,
+        scores,
+        logits,
         p_not_eoss,
         output_attention_masks,
         eos_flags,
         quantization_loss,
         output_embeds_encs,
         output_embeds_decs,
+        cross_attentions,
         **kwargs,
     ):
         
@@ -238,12 +279,18 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
             **kwargs
         )
         
+        outputs["cross_attentions"] = current_output["cross_attentions"]
         p_not_eoss.append( current_output['p_not_eos'] * p_not_eoss[step])
-        output_attention_masks = torch.cat((output_attention_masks, self.attention_mask(eos_flags, p_not_eoss[step])[:, 0].reshape(-1, 1)), dim=1)
+        output_attention_masks = torch.cat((output_attention_masks, self.attention_mask(eos_flags, p_not_eoss[step])[:, 0].reshape(-1, 1)), dim=1).to(output_attention_masks.device)
+        scores[:, step] = current_output['score']
+        logits[:, step] = current_output['logit']
         
         outputs["p_not_eoss"] = p_not_eoss
         outputs["output_attention_masks"] = output_attention_masks
         outputs["eos_flags"] = torch.logical_or(eos_flags, current_output['eos_flag'].reshape(-1, 1))
+        outputs["scores"] = scores
+        outputs["logits"] = logits
+        
         return outputs
         
     def attention_mask(self, eos_flags, p_not_eos):
@@ -260,17 +307,22 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
         step,
         preprend_length,
         ids,
+        scores,
+        logits,
         p_not_eoss,
         output_embeds_encs,
         output_embeds_decs,
         output_attention_masks,
         eos_flags,
         quantization_loss,
+        cross_attentions,
         **kwargs
     ):
                 
         # cut the tensors to the actual length, remove 0s and 1s.
         ids = ids[:, :step]
+        scores = scores[:, :step]
+        logits = logits[:, :step]
         p_not_eoss = p_not_eoss[1:]
         output_embeds_encs = output_embeds_encs[:, :step]
         output_embeds_decs = output_embeds_decs[:, :step + preprend_length]
@@ -284,17 +336,24 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
                     torch.logical_not(binary_attention_mask)[:, -ids.shape[1]:]
         #skipfirstcauseno prepend
         output_embeds_encs = output_embeds_encs * output_attention_masks[:,1:].unsqueeze(-1) + \
-            self.output_pad_embed_enc * torch.logical_not(output_attention_masks[:,1:]).unsqueeze(-1)
+            self.output_pad_embed_enc.to(output_attention_masks.device) * torch.logical_not(output_attention_masks[:,1:]).unsqueeze(-1)
         output_embeds_decs = output_embeds_decs * output_attention_masks.unsqueeze(-1) + \
-            self.output_pad_embed_dec * torch.logical_not(output_attention_masks).unsqueeze(-1)
+            self.output_pad_embed_dec.to(output_attention_masks.device) * torch.logical_not(output_attention_masks).unsqueeze(-1)
 
         
         return {
             'id': ids,
+            'score': scores,
+            'logit': logits,
             'vector_encoder': output_embeds_encs,
             'vector_decoder': output_embeds_decs,
             'quantization_loss': quantization_loss,
             'output_attention_mask': output_attention_masks,
             'eos_flag': eos_flags,
             'p_not_eos': p_not_eoss,
+            'cross_attentions': cross_attentions,
         }
+        
+    def forward(self, teacher_force_output: bool = False, max_output_length = None, **kwargs) -> Dict[str, Any]:
+        self.forced_z_length = kwargs.pop("forced_z_length", None)
+        return super().forward(teacher_force_output=teacher_force_output, max_output_length=max_output_length, **kwargs)

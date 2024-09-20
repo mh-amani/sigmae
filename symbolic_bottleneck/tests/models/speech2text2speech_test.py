@@ -62,7 +62,6 @@ def AutoRegWrappedT5SpeechTest():
         'vocab_size': speech2text_model.config.vocab_size, 
         'encoder_embedding_dim': speech2text_model.config.hidden_size
     }
-    
     speech2text_disc_config = {
         'dimensions': speech2text_dimensions,
         'encoder_embedding': text2speech_encoder_embedding ,
@@ -89,7 +88,6 @@ def AutoRegWrappedT5SpeechTest():
     # tokenizer.vocab['</s>']: 2, tokenizer.vocab['en_XX']: 250004, tokenizer.vocab['fr_XX']: 250008
     embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
     speaker_embeddings = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
-    
     txt2speech_discretizer.set_speaker_embeddings(speaker_embeddings)
     output_prepending_embeds_dec = text2speech_model.speecht5.decoder.prenet(torch.zeros(1, 1, text2speech_model.config.num_mel_bins), speaker_embeddings)
 
