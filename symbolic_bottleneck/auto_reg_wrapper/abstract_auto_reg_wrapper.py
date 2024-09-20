@@ -129,6 +129,8 @@ class AbstractAutoRegWrapper(Module):
     
     def forward(self, teacher_force_output: bool = False, max_output_length = None, **kwargs) -> Dict[str, Any]:
         
+        self.forced_z_length = kwargs.pop("forced_z_length", None)
+        
         if max_output_length is None:
             max_output_length = self.max_lengths['output']
         

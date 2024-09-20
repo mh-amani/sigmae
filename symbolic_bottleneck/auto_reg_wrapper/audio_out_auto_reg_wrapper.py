@@ -354,6 +354,3 @@ class AudioOutAutoRegWrapper(OutContAutoRegWrapper):
             'cross_attentions': cross_attentions,
         }
         
-    def forward(self, teacher_force_output: bool = False, max_output_length = None, **kwargs) -> Dict[str, Any]:
-        self.forced_z_length = kwargs.pop("forced_z_length", None)
-        return super().forward(teacher_force_output=teacher_force_output, max_output_length=max_output_length, **kwargs)
