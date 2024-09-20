@@ -27,95 +27,165 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
 
     def _initialize_metrics(self) -> None:
         # loss function is L1Loss
-        self.criterion = torch.nn.L1Loss(reduction='mean')
-
+        self.continuous_criterion = torch.nn.L1Loss(reduction='mean')
+        self.discrete_criterion = torch.nn.CrossEntropyLoss(reduction='mean')
+        self.training_modes = self.hparams['model_params']['training_modes']
+        self.training_probs = self.hparams['model_params']['training_probs']
+        self.logging_freq = self.hparams['model_params']['logging_freq']
         self.accuracies, self.losses = torch.nn.ModuleDict(), torch.nn.ModuleDict()
         for split in ['learn', 'val', 'test']: # you can't use 'train' as a key ... it's a reserved word
             self.accuracies.update({split: torch.nn.ModuleDict()})
             self.losses.update({split: torch.nn.ModuleDict()})
-            for space in ['zxz']:
-                self.accuracies[split].update({space: torch.nn.ModuleDict()})
-                self.losses[split].update({space: torch.nn.ModuleDict()})
-                for medium in ['continous output']:
-                    # metric objects for calculating and averaging accuracy across batches
-                    self.accuracies[split][space].update({medium: StructuralSimilarityIndexMeasure()})
-                    # for averaging loss across batches
-                    self.losses[split][space].update({medium: MeanMetric()})
+            for training_mode in self.training_modes:
+                # if space.endswith('x'): # text space
+                #     self.accuracies[split].update({space: MaxMetric(top_k=1)})
+                # else:
+                #     self.accuracies[split].update({space: StructuralSimilarityIndexMeasure()})
+                self.losses[split].update({training_mode:  MeanMetric()})
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.processor_z = hydra.utils.instantiate(models_config.sequence_model_zx.processor, _recursive_=False)
         self._initialize_autoreg_wrapped_models(models_config)
         self._initialize_symbolic_autoencoder_wrappers(models_config)
+        self.unfold = torch.nn.Unfold(kernel_size=(4,4), stride=(4,4))
+        self.fold = torch.nn.Fold(output_size=(28, 28), kernel_size=(4,4), stride=(4,4))
 
-    def forward(self, x, z, data_type=None, stage='learn') -> torch.Tensor:
-        """Perform a forward pass through the model `self.net`.
-
-        :param x: A tensor of images.
-        :return: A tensor of logits.
-        """
-        
+    def forward(self, x, z, data_type=None, stage='learn', training_mode=None) -> torch.Tensor:
         outputs = {}
         labels = {}
-        labels['zxz'] = {}
 
         vit_processed_z = self.processor_z(z, padding=True, return_tensors="pt", add_special_tokens=True)['pixel_values'].to(self.device)
-        # z_patches = (self.unfold(z.permute(0,3,1,2)).permute(0,2,1) - 255.0/2) / (255.0/2)
-        z_patches = self.unfold(vit_processed_z).permute(0, 2, 1)
+        z_patches = (self.unfold(z.permute(0,3,1,2)).permute(0,2,1) - 255.0/2) / (255.0/2)
         z_patches_embeds = self.discretizer_z.decoder_embedding(z_patches)
-        
-        outputs['zxz'] = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=vit_processed_z,  z_embeds_dec=z_patches_embeds if stage=='learn' else None, 
-                                                            z_attention_mask=None, teacher_force_z=(stage=='learn'),)
-        outputs['zxz']['id_z'] = outputs['zxz']['id_z'][:, :-1, ...] if stage=='learn' else outputs['zxz']['id_z']
 
-        output_image = self.fold(outputs['zxz']['id_z'].permute(0, 2, 1))*255/2 + 255.0/2
-        outputs['zxz']['image'] = output_image
-        labels['zxz']['image'] = z.permute(0,3,1,2)
-        # penalize the patches, 
-        outputs['zxz']['logit'] = outputs['zxz']['id_z']
-        labels['zxz']['logit']  = z_patches
-        # or penalize the actual image
-        # outputs['zxz']['logit'] = self.fold(outputs['zxz']['id_z'].permute(0, 2, 1))
-        # labels['zxz']['logit']  = z.permute(0,3,1,2)/255
+        # Use specified training_mode during validation; otherwise, select randomly
+        if training_mode is None:
+            cointoss = torch.rand(1).item()
+            for i in range(len(self.training_modes)):
+                if cointoss < self.training_probs[i]:
+                    training_mode = self.training_modes[i]
+                    break
+                cointoss -= self.training_probs[i]
+
+        labels[training_mode] = {}
+
+        if training_mode == 'zxz' or training_mode == 'zxz_unteacherforced':
+            if training_mode == 'zxz':
+                outputs[training_mode] = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=vit_processed_z,  z_embeds_dec=z_patches_embeds if stage=='learn' else None, 
+                                                                    z_attention_mask=None, teacher_force_z=(stage=='learn'),)
+                outputs[training_mode]['id_z'] = outputs[training_mode]['id_z'][:, :-1, ...] if stage=='learn' else outputs[training_mode]['id_z']
+            elif training_mode == 'zxz_unteacherforced':
+                # mini_batch_size = 100
+                # vit_processed_z = vit_processed_z[:mini_batch_size]
+                # z_patches = z_patches[:mini_batch_size]
+                outputs[training_mode] = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=vit_processed_z,  teacher_force_z=False)
+            output_image = self.fold(outputs[training_mode]['id_z'].permute(0, 2, 1))
+            outputs[training_mode]['image'] = output_image * 255.0/2 + 255.0/2 #(self.fold(z_patches.permute(0, 2, 1)) * 255.0/2 + 255.0/2 - z.permute(0,3,1,2)).var(): tensor(1.1724e-12, device='cuda:0')
+            labels[training_mode]['image'] = z.permute(0,3,1,2)
+            outputs[training_mode]['image_caption'] = outputs[training_mode]['id_y']
+            # penalize the patches
+            outputs[training_mode]['logit'] = outputs[training_mode]['id_z']
+            labels[training_mode]['logit']  = z_patches
+
+        elif training_mode == 'xzx':
+            random_batch_of_tokens = self._create_random_batch_of_tokens(batchsize=z_patches_embeds.shape[0], max_num_tokens=10)
+            outputs[training_mode] = self.symbolic_autoencoder_wrapper_xzx(x_ids=random_batch_of_tokens, z_ids=random_batch_of_tokens, teacher_force_z=True)
+            outputs[training_mode]['image'] = self.fold(outputs[training_mode]['id_y'].permute(0, 2, 1)) * 255.0/2 + 255.0/2 #(self.fold(z_patches.permute(0, 2, 1)) * 255.0/2 + 255.0/2 - z.permute(0,3,1,2)).var(): tensor(1.1724e-12, device='cuda:0')
+            labels[training_mode]['image'] = z.permute(0,3,1,2)
+            outputs[training_mode]['image_caption'] = random_batch_of_tokens
+            # penalize the patches
+            outputs[training_mode]['logit'] = outputs['xzx']['logit_z']
+            labels[training_mode]['logit']  = random_batch_of_tokens
 
         return outputs, labels
-
-    def model_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor], stage, log_things=True) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Perform a single model step on a batch of data.
-
-        :param batch: A batch of data (a tuple) containing the input tensor of images and target labels.
-
-        :return: A tuple containing (in order):
-            - A tensor of losses.
-            - A tensor of predictions.
-            - A tensor of target labels.
-        """
-        # stage = self.trainer.state.stage._value_ # stages are 'fit', 'validate', 'test', 'predict', 'sanity_check'
+    
+    def model_step(self, batch, batch_idx=-1, stage='learn', log_things=True):
         x, z, data_type = batch['x'], batch['z'], batch['data_type']
         z = z[..., 0:self.hparams['model_params']['num_channels']]
         data_type = torch.all(data_type, dim=0)
-        
-        outputs, labels = self.forward(x, z, data_type, stage=stage)
-        loss = self.criterion(outputs['zxz']['logit'], labels['zxz']['logit'])
-        self.losses[stage]['zxz']['continous output'](loss)
-        self.accuracies[stage]['zxz']['continous output'](outputs['zxz']['image'], labels['zxz']['image'])
-        
-        if log_things:
-            self._log_output_samples(outputs['zxz']['image'], labels['zxz']['image'], outputs['zxz']['id_y'], stage, freq=100, num_images=10)
 
-        return loss
+        total_loss = 0
+
+        if stage == 'val':
+            # Loop over each training mode during validation
+            for training_mode in self.training_modes:
+                outputs, labels = self.forward(x, z, data_type, stage=stage, training_mode=training_mode)
+
+                # Compute loss
+                loss = self.compute_loss(outputs, labels, training_mode, stage)
+                total_loss += loss
+
+                # Log metrics
+                log_kwargs = self.logging_kwargs[stage]
+                self.log(f"{stage}/{training_mode}/loss", self.losses[stage][training_mode], **log_kwargs)
+
+                # Log images only for the first batch
+                if batch_idx == 0:
+                    self._log_output_samples(
+                        outputs[training_mode]['image'],
+                        labels[training_mode]['image'],
+                        outputs[training_mode]['image_caption'],
+                        stage,
+                        training_mode,
+                        num_images=10
+                    )
+        else:
+            # Existing behavior for training and testing
+            outputs, labels = self.forward(x, z, data_type, stage=stage)
+            training_mode = list(outputs.keys())[0]
+            loss = self.compute_loss(outputs, labels, training_mode, stage)
+            total_loss = loss
+
+            # Log metrics
+            log_kwargs = self.logging_kwargs[stage]
+            self.log(f"{stage}/{training_mode}/loss", self.losses[stage][training_mode], **log_kwargs)
+
+            # Conditional logging during training
+            if log_things and self.global_step % self.logging_freq == 0:
+                self._log_output_samples(
+                    outputs[training_mode]['image'],
+                    labels[training_mode]['image'],
+                    outputs[training_mode]['image_caption'],
+                    stage,
+                    training_mode,
+                    num_images=10
+                )
+
+        return total_loss
     
-    # # the train loop to debug the grads
-    # def training_step(self, batch, batch_idx):
-            
-    #     loss = self.model_step(batch, stage='learn')
-    #     opt = self.optimizers()
-    #     # scale losses by 1/N (for N batches of gradient accumulation)
-    #     self.manual_backward(loss)
+    def compute_loss(self, outputs, labels, training_mode, stage):
+        if training_mode.endswith('x'):  # Text space
+            non_pad_mask = labels[training_mode]['logit'][..., 1:] != self.auto_reg_wrapped_model_zx.control_token_ids['output_pad_token_id']
+            labels_for_loss = labels[training_mode]['logit'][..., 1:].clone()
+            labels_for_loss[~non_pad_mask] = -100
+            loss = self.discrete_criterion(
+                outputs[training_mode]['logit'][..., :-1, :].permute(0, 2, 1),
+                labels_for_loss
+            )
+        else:  # Continuous space
+            loss = self.continuous_criterion(
+                outputs[training_mode]['logit'],
+                labels[training_mode]['logit']
+            )
 
-    #     # accumulate gradients of N batches
-    #     opt.step()
-    #     opt.zero_grad()
+        self.losses[stage][training_mode](loss)
+        return loss
+
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.model_step(batch, batch_idx, stage='val')
+        self.log("val/loss", loss, **self.logging_kwargs['val'])
+        return loss
+
+        
+    def _create_random_batch_of_tokens(self, batchsize, max_num_tokens):
+        random_batch_of_tokens = torch.randint(4, self.discretizer_x.vocab_size, (batchsize, max_num_tokens)).to(self.device)
+        random_batch_of_tokens[:, 0] = 3
+        ending_index = torch.randint(1, max_num_tokens, (batchsize,))
+        for i in range(batchsize):
+            random_batch_of_tokens[i, ending_index[i]] = 2
+            random_batch_of_tokens[i, ending_index[i]+1:] = 0
+        return random_batch_of_tokens
 
     def _prepare_to_show_output_samples(self, z_pred, z_true, symbolic_sequence, num_images=10) -> None:
         # log 10 images every 2 epochs
@@ -145,8 +215,8 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
             if pred_img.max() <= 1.0:
                 pred_img = np.clip(pred_img * 255.0, 0, 255)
             
-            true_img = true_img.astype(np.uint8)
-            pred_img = pred_img.astype(np.uint8)
+            true_img = np.clip(true_img, 0, 255).astype(np.uint8)
+            pred_img = np.clip(pred_img, 0, 255).astype(np.uint8)
 
             # Convert NumPy arrays to PIL Images
             true_img_pil = Image.fromarray(true_img)
@@ -173,13 +243,14 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
 
         return combined_images, logged_sequences
             
-            
 
-    def _log_output_samples(self, z_pred, z_true, symbolic_sequence, stage, freq=200, num_images=10) -> None:
-        if self.global_step % freq == 2 or (stage != 'learn' and self.global_step % (freq//50) == 1):
-            combined_images, logged_sequences = self._prepare_to_show_output_samples(z_pred, z_true, symbolic_sequence, num_images)
-            name = f"{stage}/output_samples"
-            self.logger.log_image(key=name, images=combined_images, caption=logged_sequences)
+    def _log_output_samples(self, z_pred, z_true, symbolic_sequence, stage, training_mode, num_images=10) -> None:
+        combined_images, logged_sequences = self._prepare_to_show_output_samples(
+            z_pred, z_true, symbolic_sequence, num_images
+        )
+        name = f"{stage}/{training_mode}/output_samples"
+        self.logger.log_image(key=name, images=combined_images, caption=logged_sequences)
+
 
 
     def _initialize_autoreg_wrapped_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
@@ -200,11 +271,11 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
             # self._set_discretizer_weights(self.discretizer_z.encoder_embedding, self.sequence_model_zx_unwrapped['encoder_embedding'])
             self._set_discretizer_weights(self.discretizer_x.encoder_embedding, self.sequence_model_xz_unwrapped['encoder_embedding'])
             # Decoder Embeddings
-            desc_z_dec_shape = self.discretizer_z.decoder_embedding.weight.data.shape
-            self.discretizer_z.decoder_embedding.weight.data = self.sequence_model_xz_unwrapped['decoder_embedding'].weight.clone()[:self.discretizer_z.decoder_embedding_dim].T[:desc_z_dec_shape[0], :desc_z_dec_shape[1]] 
+            # desc_z_dec_shape = self.discretizer_z.decoder_embedding.weight.data.shape
+            # self.discretizer_z.decoder_embedding.weight.data = self.sequence_model_xz_unwrapped['decoder_embedding'].weight.clone()[:self.discretizer_z.decoder_embedding_dim].T[:desc_z_dec_shape[0], :desc_z_dec_shape[1]] 
             self._set_discretizer_weights(self.discretizer_x.decoder_embedding, self.sequence_model_zx_unwrapped['decoder_embedding'])
             # Linear Head (for the linear layers)
-            self._set_discretizer_weights(self.discretizer_z.linear_head, self.sequence_model_xz_unwrapped['linear_head'])
+            # self._set_discretizer_weights(self.discretizer_z.linear_head, self.sequence_model_xz_unwrapped['linear_head'])
             self._set_discretizer_weights(self.discretizer_x.linear_head, self.sequence_model_zx_unwrapped['linear_head'])
 
         # config for the autoregressive wrapper
@@ -229,8 +300,92 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
                 vector_model=self.sequence_model_zx, input_discretizer=self.discretizer_z, output_discretizer=self.discretizer_x,)
 
     def _initialize_symbolic_autoencoder_wrappers(self, models_config: Dict[str, torch.nn.Module]) -> None:
-        self.unfold = torch.nn.Unfold(kernel_size=(4,4), stride=(4,4))
-        self.fold = torch.nn.Fold(output_size=(28, 28), kernel_size=(4,4), stride=(4,4))
         self.symbolic_autoencoder_wrapper_zxz = hydra.utils.instantiate(models_config.symbolic_autoencoder_wrapper_zxz, 
                 self.auto_reg_wrapped_model_zx, self.auto_reg_wrapped_model_xz)
         self.symbolic_autoencoder_wrapper_zxz.transform_xy_outputs_to_y_inputs = self.symbolic_autoencoder_wrapper_zxz.config['transform_xy_outputs_to_y_inputs']
+
+        self.symbolic_autoencoder_wrapper_xzx = hydra.utils.instantiate(models_config.symbolic_autoencoder_wrapper_xzx,
+                self.auto_reg_wrapped_model_xz, self.auto_reg_wrapped_model_zx)
+        self.symbolic_autoencoder_wrapper_xzx.processor_z = self.processor_z
+    
+        # Assign the closure
+        self.symbolic_autoencoder_wrapper_xzx.transform_xy_outputs_to_y_inputs = self.make_transform_image_patch_to_input_image()
+
+
+    def make_transform_image_patch_to_input_image(self):
+        def transform_image_patch_to_input_image(outputs):
+            image_patches = outputs['id']
+            processed_image = self.fold(image_patches.permute(0, 2, 1))
+            return {'vector_encoder': processed_image, 'output_attention_mask': None}
+        return transform_image_patch_to_input_image
+
+    
+
+
+
+    # Helper functions
+
+
+    # def model_step(
+    #     self, batch: Tuple[torch.Tensor, torch.Tensor], stage, log_things=True) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    #     """Perform a single model step on a batch of data.
+
+    #     :param batch: A batch of data (a tuple) containing the input tensor of images and target labels.
+
+    #     :return: A tuple containing (in order):
+    #         - A tensor of losses.
+    #         - A tensor of predictions.
+    #         - A tensor of target labels.
+    #     """
+    #     x, z, data_type = batch['x'], batch['z'], batch['data_type']
+    #     z = z[..., 0:self.hparams['model_params']['num_channels']]
+    #     data_type = torch.all(data_type, dim=0)
+        
+    #     outputs, labels = self.forward(x, z, data_type, stage=stage)
+        
+    #     # compute losses, predictions and update metrics
+    #     # losses = {}
+    #     # preds = {}
+    #     loss = 0
+    #     training_mode = list(outputs.keys())[0]
+    #     # Create a mask for non-pad tokens
+    #     if training_mode.endswith('x'): # text space
+    #         non_pad_mask = labels[training_mode]['logit'][..., 1:] != self.auto_reg_wrapped_model_zx.control_token_ids['output_pad_token_id']
+    #         # Temporarily replace pad tokens with -100
+    #         labels_for_loss = labels[training_mode]['logit'][..., 1:].clone()
+    #         labels_for_loss[~non_pad_mask] = -100
+    #         loss = self.discrete_criterion(outputs[training_mode]['logit'][..., :-1, :].permute(0, 2, 1), labels_for_loss)
+            
+    #         self.losses[stage][training_mode](loss)
+    #         # preds[training_mode] = torch.argmax(outputs[training_mode]['logit'], dim=-1)
+    #         # Use the non-pad mask for accuracy calculation
+    #         # self.accuracies[stage][space](preds[space][..., :-1][non_pad_mask], labels[space][..., 1:][non_pad_mask])
+
+    #     else: 
+    #         loss = self.continuous_criterion(outputs[training_mode]['logit'], labels[training_mode]['logit'])
+    #         self.losses[stage][training_mode](loss)
+    #         # self.accuracies[stage][space]['continous output'](outputs['zxz']['image'], labels['zxz']['image'])
+    
+    #     # Log metrics
+    #     # Use the logging kwargs based on the current stage
+    #     log_kwargs = self.logging_kwargs[stage]
+    #     self.log(f"{stage}/{training_mode}/loss", self.losses[stage][training_mode], **log_kwargs)        
+    #     # self.log(f"{stage}/{space}/acc", self.accuracies[stage][space]['token'], **log_kwargs)             
+
+    #     # if last batch of the epoch, log the output samples
+    #     if log_things and self.global_step % self.hparams['models_config']['logging_freq'] == 0:
+    #         self._log_output_samples(outputs[training_mode]['image'], labels[training_mode]['image'], outputs[training_mode]['id_z'], stage, training_mode, self.hparams['models_config']['logging_freq'], num_images=10)
+
+    #     return loss
+    
+    # # the train loop to debug the grads
+    # def training_step(self, batch, batch_idx):
+            
+    #     loss = self.model_step(batch, stage='learn')
+    #     opt = self.optimizers()
+    #     # scale losses by 1/N (for N batches of gradient accumulation)
+    #     self.manual_backward(loss)
+
+    #     # accumulate gradients of N batches
+    #     opt.step()
+    #     opt.zero_grad()

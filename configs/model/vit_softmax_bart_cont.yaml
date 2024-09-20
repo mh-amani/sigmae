@@ -13,8 +13,6 @@ _target_: src.models.sigmae_lit_module_im_to_text.SigmaeLitModuleImageToText
 
 models_config:
 
-  inherit_model_embedding_weights_for_discretizers: true
-
   sequence_model_xz: #txt to img
     _target_: symbolic_bottleneck.auto_reg_wrapper.OutContAutoRegWrapper
     config:

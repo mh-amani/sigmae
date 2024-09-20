@@ -7,8 +7,10 @@ defaults:
   - override /model: vit_softmax_bart_cont
 
 trainer:
-  min_epochs: 50
-  max_epochs: 100
+  min_epochs: 100
+  max_epochs: 200
+  check_val_every_n_epoch: 5
+  log_every_n_steps: 5
 
 callbacks:
   supervision_scheduler:
@@ -39,8 +41,12 @@ model:
     max_x_length: 10
     max_z_length: 50
     image_size: 28
-    num_channels: 1
+    num_channels: 3
     d_model: 512
+    inherit_model_embedding_weights_for_discretizers: true
+    logging_freq: 200
+    training_modes: ['zxz','zxz_unteacherforced','xzx']
+    training_probs: [0.85,0.1,0.05]
     processor:
       image_mean: 0.5
       image_std: 0.5
