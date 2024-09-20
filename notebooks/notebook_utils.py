@@ -50,27 +50,27 @@ def send_batch_to_device(batch, device):
             batch[key] = batch[key].to(device)
     return batch
 
-path = "/dlabscratch1/amani/sigmae/logs/train/runs/2024-09-12_13-07-22/"
+# path = "/dlabscratch1/amani/sigmae/logs/train/runs/2024-09-12_13-07-22/"
 
-batch_size = 32
-model_path = path + "checkpoints/last.ckpt"
-configs_path = path + ".hydra/"
-config_name = "config.yaml"
-with hydra.initialize_config_dir(config_dir=configs_path, version_base="1.2"):
-    config = hydra.compose(config_name=config_name, 
-                           overrides=[f"data.batch_size={batch_size}", 
-                                    f"ckpt_path={model_path}"
-                                    ])
+# batch_size = 32
+# model_path = path + "checkpoints/last.ckpt"
+# configs_path = path + ".hydra/"
+# config_name = "config.yaml"
+# with hydra.initialize_config_dir(config_dir=configs_path, version_base="1.2"):
+#     config = hydra.compose(config_name=config_name, 
+#                            overrides=[f"data.batch_size={batch_size}", 
+#                                     f"ckpt_path={model_path}"
+#                                     ])
 
-model, datamodule = run_inference(config)
-datamodule.processor_z = model.processor_z
-datamodule.processor_x = None # for image text
-datamodule.setup('test', processor_z=model.processor_z)
+# model, datamodule = run_inference(config)
+# datamodule.processor_z = model.processor_z
+# datamodule.processor_x = None # for image text
+# datamodule.setup('test', processor_z=model.processor_z)
 
-test_datamodule = datamodule.test_dataloader()
-batch = next(iter(test_datamodule))
-batch = send_batch_to_device(batch, model.device)
-output = model.model_step(batch, 'test')
+# test_datamodule = datamodule.test_dataloader()
+# batch = next(iter(test_datamodule))
+# batch = send_batch_to_device(batch, model.device)
+# output = model.model_step(batch, 'test')
 
 
 

@@ -201,7 +201,7 @@ class SigmaeLitModuleBase(LightningModule):
             else:
                 target.weight.data = source.weight[:vocab_size, :embedding_dim]
             # If the layer is Linear and has a bias term, copy the bias as well
-            if isinstance(target, torch.nn.Linear) and target.bias is not None:
+            if isinstance(target, torch.nn.Linear) and target.bias is not None and isinstance(source, torch.nn.Linear):
                 target.bias.data = source.bias[:target.bias.shape[0]].clone() if clone else source.bias[:target.bias.shape[0]]
                 
 if __name__ == "__main__":

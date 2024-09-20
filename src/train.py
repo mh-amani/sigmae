@@ -7,6 +7,7 @@ import hydra
 import lightning as L
 import rootutils
 import torch
+torch.multiprocessing.set_sharing_strategy('file_descriptor')
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig

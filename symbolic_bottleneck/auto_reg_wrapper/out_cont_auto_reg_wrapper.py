@@ -44,7 +44,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
         output_embeds_enc=None,
         output_embeds_dec=None,
     ):
-                
+        # assert output_attention_mask is None, "output_attention_mask should not be provided, it's a continuous output model."
         assert (input_ids is not None) != (input_embeds_enc is not None), "Either input_ids or input_embeds should be provided"
         if not self.NO_INPUT_ATTENTION_MASK:
             assert (input_embeds_enc is not None and input_attention_mask is not None) or (input_embeds_enc is None and input_attention_mask is None), "input_embeds and input_attention_mask should be provided together or not at all. HINT: if you're model does not accept input_attention_mask, set the class variable NO_INPUT_ATTENTION_MASK to True"

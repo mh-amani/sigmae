@@ -39,11 +39,11 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
             for space in ['xz', 'zx', 'xzx', 'zxz']:
                 self.accuracies[split].update({space: torch.nn.ModuleDict()})
                 self.losses[split].update({space: torch.nn.ModuleDict()})
-                for medium in ['token', 'sequence']:
+                for medium in ['token',]: # 'sequence' also can be
                     # metric objects for calculating and averaging accuracy across batches
-                    self.accuracies[split][space].update({medium: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)})
+                    self.accuracies[split][space].update(torch.nn.ModuleDict({medium: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)}))
                     # for averaging loss across batches
-                    self.losses[split][space].update({medium: MeanMetric()})
+                    self.losses[split][space].update(torch.nn.ModuleDict({medium: MeanMetric()}))
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.tokenizer_x = hydra.utils.instantiate(models_config.sequence_model_xz.tokenizer, _recursive_=False)
@@ -109,8 +109,9 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
         losses = {}
         preds = {}
         loss = 0
+
         for space in outputs.keys():
-            for space in outputs.keys():
+            for medium in outputs[space].keys():
                 # Create a mask for non-pad tokens
                 non_pad_mask = labels[space][..., 1:] != self.tokenizer_x.pad_token_id if space in ['zx', 'xzx'] else \
                         labels[space][..., 1:] != self.tokenizer_z.pad_token_id
@@ -120,20 +121,20 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
                 labels_for_loss[~non_pad_mask] = -100
 
                 losses[space]= self.criterion(outputs[space]['logit'][..., :-1, :].permute(0, 2, 1), labels_for_loss)
-                self.losses[stage][space]['token'].update(losses[space])
+                self.losses[stage][space][medium].update(losses[space])
                 loss += losses[space]
 
                 preds[space] = torch.argmax(outputs[space]['logit'], dim=-1)
                 # Use the non-pad mask for accuracy calculation
-                self.accuracies[stage][space]['token'](preds[space][..., :-1][non_pad_mask], labels[space][..., 1:][non_pad_mask])
+                self.accuracies[stage][space][medium](preds[space][..., :-1][non_pad_mask], labels[space][..., 1:][non_pad_mask])
 
                 # Log metrics
                 # Use the logging kwargs based on the current stage
                 log_kwargs = self.logging_kwargs[stage]
-                self.log(f"{stage}/{space}/loss", self.losses[stage][space]['token'], 
+                self.log(f"{stage}/{space}/{medium}/loss", self.losses[stage][space]['token'], 
                         metric_attribute=f"losses_{stage}_{space}_token", **log_kwargs)
                 
-                self.log(f"{stage}/{space}/acc", self.accuracies[stage][space]['token'], 
+                self.log(f"{stage}/{space}/{medium}/acc", self.accuracies[stage][space]['token'], 
                         metric_attribute=f"accuracies_{stage}_{space}_token", **log_kwargs)
 
         # loss = losses['xz']

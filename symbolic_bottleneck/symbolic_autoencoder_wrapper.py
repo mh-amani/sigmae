@@ -39,12 +39,16 @@ class SymbolicAutoEncoderWrapper(Module):
                 teacher_force_output=False, max_output_length=max_y_length)
 
         y_inputs = self.transform_xy_outputs_to_y_inputs(xy_outputs)
-        y_inputs['vector_encoder'] = y_inputs['vector_encoder'] * y_inputs['output_attention_mask'].unsqueeze(-1) + \
-            (1 - y_inputs['output_attention_mask']).detach().unsqueeze(-1) * y_inputs['vector_encoder'] # I don't even know what I'm doing here
+        if y_inputs['output_attention_mask'] is not None:
+            y_inputs['vector_encoder'] = y_inputs['vector_encoder'] * y_inputs['output_attention_mask'].unsqueeze(-1) + \
+                (1 - y_inputs['output_attention_mask']).detach().unsqueeze(-1) * y_inputs['vector_encoder'] # I don't even know what I'm doing here
+            y_input_attention_mask = y_inputs['output_attention_mask']>0
+        else:
+            y_input_attention_mask = None
 
 
         yz_outputs = self.model_y_to_z(
-            input_embeds_enc=y_inputs['vector_encoder'], input_attention_mask=y_inputs['output_attention_mask']>0, 
+            input_embeds_enc=y_inputs['vector_encoder'], input_attention_mask=y_input_attention_mask, 
             output_ids=z_ids, output_embeds_dec=z_embeds_dec, output_attention_mask=z_attention_mask,
             teacher_force_output=teacher_force_z, max_output_length=max_z_length, forced_z_length=forced_z_length)
             

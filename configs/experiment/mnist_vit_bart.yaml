@@ -7,8 +7,10 @@ defaults:
   - override /model: vit_softmax_bart_cont
 
 trainer:
-  min_epochs: 50
-  max_epochs: 100
+  min_epochs: 100
+  max_epochs: 200
+  check_val_every_n_epoch: 5
+  log_every_n_steps: 5
 
 callbacks:
   supervision_scheduler:
@@ -33,24 +35,24 @@ model:
     
   model_params:
     # to be manually set
+    monitor: 'val/loss'
     x_vocab_size: 17
     z_patch_size: 16
     max_x_length: 10
     max_z_length: 50
     image_size: 28
+    num_channels: 3
     d_model: 512
+    inherit_model_embedding_weights_for_discretizers: true
+    logging_freq: 200
+    training_modes: ['zxz','zxz_unteacherforced','xzx']
+    training_probs: [0.85,0.1,0.05]
     processor:
       image_mean: 0.5
       image_std: 0.5
       image_size: 28
-    monitor: 'val/loss'
+    
   
-  models_config:
-    sequence_model_xz:
-      model:
-        config:
-          vocab_size: ${model.model_params.x_vocab_size}
-          # max_position_embeddings: ${input_max_position_embeddings}
 
       tokenizer: null
   scheduler:
