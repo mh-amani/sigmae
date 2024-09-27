@@ -1,26 +1,29 @@
 defaults: 
  - default
- - override /model/components/sequence_models@models_config.sequence_model_xz: bart
- - override /model/components/sequence_models@models_config.sequence_model_zx: speech_encoder_decoder
+ - override /model/components/sequence_models@models_config.sequence_model_xz: cnn # cnn or bart
+ - override /model/components/sequence_models@models_config.sequence_model_zx: vision_transformer # vision_transformer or vision_transformer_pretrained
  - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_xzx: bart_bart
  - override /model/components/symbolic_bottlenecks@models_config.symbolic_autoencoder_wrapper_zxz: bart_bart
  - override /model/components/discretizers@models_config.discretizer_x: softmaxDB
  - override /model/components/discretizers@models_config.discretizer_z: identity
 
-_target_: src.models.sigmae_lit_module_audio_to_text.SigmaeLitModuleAudioToText
+_target_: src.models.sigmae_lit_module_im_to_text_cnn.SigmaeLitModuleImageToTextCNN
 
 #here z is the image and x is the text
 
 models_config:
-  sequence_model_xz: #im2txt
-    _target_: symbolic_bottleneck.auto_reg_wrapper.OutContAutoRegWrapper
+
+  sequence_model_xz: #txt to img
     config:
-      max_lengths:
-        input: ${model.model_params.max_x_length}
-        output: ${model.model_params.max_z_length}
+      input_size: ${mult_int:${model.model_params.max_x_length},${model.model_params.d_model}}
+      output_length: 
+        - ${model.model_params.num_channels}
+        - ${model.model_params.image_size}
+        - ${model.model_params.image_size}
+
     model:
-      config:
-        vocab_size: ${model.model_params.x_vocab_size}
+      in_channels: ${model.model_params.max_x_length}
+      out_channels: ${model.model_params.num_channels}
 
   sequence_model_zx:
     config:
@@ -41,6 +44,7 @@ models_config:
       dimensions:
         encoder_embedding_dim: ${model.model_params.d_model}
         decoder_embedding_dim: ${model.model_params.d_model}
-        unembedding_dim: ${model.model_params.d_model}
-        vocab_size: ${model.model_params.d_model}
+        unembedding_dim: ${mult_int:${model.model_params.z_patch_size},${model.model_params.num_channels}} #3 or 1 channels
+        vocab_size: ${mult_int:${model.model_params.z_patch_size},${model.model_params.num_channels}} #3 or 1 channels
+    
     

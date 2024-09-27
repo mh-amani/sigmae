@@ -156,3 +156,5 @@ scripts/disposable/
 .aim
 
 .DS_Store
+/outputs/
+/taming/

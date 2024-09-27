@@ -2,7 +2,7 @@ from typing import Any, Dict, Tuple, List
 import hydra
 import torch
 from lightning import LightningModule
-
+from omegaconf import OmegaConf
 
 class SigmaeLitModuleBase(LightningModule):
     """Example of a `LightningModule`
@@ -102,11 +102,11 @@ class SigmaeLitModuleBase(LightningModule):
         """Lightning hook that is called when training begins."""
         # by default lightning executes validation step sanity checks before training starts,
         # so it's worth to make sure validation metrics don't store results from these checks
-        for split in self.accuracies.keys():
-            for space in self.accuracies[split].keys():
-                for medium in self.accuracies[split][space].keys():
-                    self.accuracies[split][space][medium].reset()
-                    self.losses[split][space][medium].reset()
+        # for split in self.accuracies.keys():
+        #     for space in self.accuracies[split].keys():
+        #         for medium in self.accuracies[split][space].keys():
+        #             self.accuracies[split][space][medium].reset()
+        #             self.losses[split][space][medium].reset()
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -159,28 +159,46 @@ class SigmaeLitModuleBase(LightningModule):
             for model in [self.sequence_model_xz, self.sequence_model_zx]:
                 model = torch.compile(model)
 
+
     def configure_optimizers(self) -> Dict[str, Any]:
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
         Normally you'd need one. But in the case of GANs or similar you might have multiple.
-
-        Examples:
-            https://lightning.ai/docs/pytorch/latest/common/lightning_module.html#configure-optimizers
-
-        :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
         """
         optimizer = hydra.utils.instantiate(self.hparams.optimizer, params=self.trainer.model.parameters())
+
         if self.hparams.scheduler is not None:
-            scheduler_config = self.hparams.scheduler.pop('scheduler_config', None)
-            scheduler = hydra.utils.instantiate(self.hparams.scheduler, optimizer=optimizer)
+            # Create a copy of self.hparams.scheduler without modifying the original
+            scheduler_config = self.hparams.scheduler.get('scheduler_config', {})
+
+            # Copy everything except 'scheduler_config' into a new OmegaConf object
+            scheduler_copy = OmegaConf.masked_copy(self.hparams.scheduler, self.hparams.scheduler.keys())
+            scheduler_copy.pop('scheduler_config', None)  # Exclude scheduler_config from the new copy
+
+            # Instantiate the scheduler using the new copy
+            scheduler = hydra.utils.instantiate(scheduler_copy, optimizer=optimizer)
+
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
-                    **scheduler_config,
+                    **scheduler_config,  # Add the scheduler_config from the original config
                 },
             }
+
         return {"optimizer": optimizer}
 
+
+    # def on_fit_start(self) -> None:
+    #     """Lightning hook that is called when the fit begins."""
+    #     print('my name is masani and i hate my life')
+    #     # self.configure_optimizers()
+    #     self.configure_optimizers()
+    #     self.trainer.optimizers
+    #     return super().on_fit_start()
+    
+    def on_load_checkpoint(self, checkpoint):
+        checkpoint["optimizer_states"] = []
+        
     # Utility function to cleanly set the embedding or linear layer weights from the source model
     def _set_discretizer_weights(self, target, source, clone=True):
         """
@@ -193,7 +211,8 @@ class SigmaeLitModuleBase(LightningModule):
             clone (bool): Whether to clone the weights and bias to avoid in-place modification.
         """
         # Handle the weights for embedding or linear layers
-        if isinstance(target, torch.nn.Embedding) or isinstance(target, torch.nn.Linear):
+        if (isinstance(target, torch.nn.Embedding) or isinstance(target, torch.nn.Linear)) and \
+            (isinstance(source, torch.nn.Embedding) or isinstance(source, torch.nn.Linear)):
             # For Embedding or Linear layer, handle .weight
             vocab_size, embedding_dim = target.weight.shape
             if clone:

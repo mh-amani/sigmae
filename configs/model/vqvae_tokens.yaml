@@ -7,16 +7,19 @@ defaults:
  - override /model/components/discretizers@models_config.discretizer_x: default
  - override /model/components/discretizers@models_config.discretizer_z: default
 
-_target_: src.models.sigmae_lit_module_text_to_text.SigmaeLitModuleTextToText
+_target_: src.models.sigmae_lit_module_im_to_text_on_vqvae_tokens.SigmaeLitModuleImageToTextOnVQVAETokens
 
 models_config:
   sequence_model_xz: 
+    tokenizer: null
     config:
       max_lengths:
         input: ${model.model_params.max_x_length}
         output: ${model.model_params.max_z_length}
+    
         
   sequence_model_zx: 
+    tokenizer: null
     config:
       max_lengths:
         input: ${model.model_params.max_z_length}

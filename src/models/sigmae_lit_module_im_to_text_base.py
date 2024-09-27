@@ -4,11 +4,12 @@ from typing import Tuple, Dict
 from omegaconf import OmegaConf
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.image import StructuralSimilarityIndexMeasure
+from src.models.components.vit_unprocessor import UnViTImageProcessor
 from .sigmae_lit_module_base import SigmaeLitModuleBase
 from PIL import Image
 import numpy as np
 
-class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
+class SigmaeLitModuleImageToTextBase(SigmaeLitModuleBase):
     def __init__(
         self,
         models_config,
@@ -37,67 +38,22 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
             self.accuracies.update({split: torch.nn.ModuleDict()})
             self.losses.update({split: torch.nn.ModuleDict()})
             for training_mode in self.training_modes:
-                # if space.endswith('x'): # text space
-                #     self.accuracies[split].update({space: MaxMetric(top_k=1)})
-                # else:
-                #     self.accuracies[split].update({space: StructuralSimilarityIndexMeasure()})
                 self.losses[split].update({training_mode:  MeanMetric()})
+                # if training_mode.endswith('x'): # text space
+                #     self.accuracies[split].update({training_mode: MaxMetric(top_k=1)})
+                # else:
+                #     self.accuracies[split].update({training_mode: StructuralSimilarityIndexMeasure()})
+                
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.processor_z = hydra.utils.instantiate(models_config.sequence_model_zx.processor, _recursive_=False)
+        self.unprocessor_z = UnViTImageProcessor(self.processor_z,original_height=self.hparams['model_params']['image_size'],original_width=self.hparams['model_params']['image_size'],)
         self._initialize_autoreg_wrapped_models(models_config)
         self._initialize_symbolic_autoencoder_wrappers(models_config)
-        self.unfold = torch.nn.Unfold(kernel_size=(4,4), stride=(4,4))
-        self.fold = torch.nn.Fold(output_size=(28, 28), kernel_size=(4,4), stride=(4,4))
+
 
     def forward(self, x, z, data_type=None, stage='learn', training_mode=None) -> torch.Tensor:
-        outputs = {}
-        labels = {}
-
-        vit_processed_z = self.processor_z(z, padding=True, return_tensors="pt", add_special_tokens=True)['pixel_values'].to(self.device)
-        z_patches = (self.unfold(z.permute(0,3,1,2)).permute(0,2,1) - 255.0/2) / (255.0/2)
-        z_patches_embeds = self.discretizer_z.decoder_embedding(z_patches)
-
-        # Use specified training_mode during validation; otherwise, select randomly
-        if training_mode is None:
-            cointoss = torch.rand(1).item()
-            for i in range(len(self.training_modes)):
-                if cointoss < self.training_probs[i]:
-                    training_mode = self.training_modes[i]
-                    break
-                cointoss -= self.training_probs[i]
-
-        labels[training_mode] = {}
-
-        if training_mode == 'zxz' or training_mode == 'zxz_unteacherforced':
-            if training_mode == 'zxz':
-                outputs[training_mode] = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=vit_processed_z,  z_embeds_dec=z_patches_embeds if stage=='learn' else None, 
-                                                                    z_attention_mask=None, teacher_force_z=(stage=='learn'),)
-                outputs[training_mode]['id_z'] = outputs[training_mode]['id_z'][:, :-1, ...] if stage=='learn' else outputs[training_mode]['id_z']
-            elif training_mode == 'zxz_unteacherforced':
-                # mini_batch_size = 100
-                # vit_processed_z = vit_processed_z[:mini_batch_size]
-                # z_patches = z_patches[:mini_batch_size]
-                outputs[training_mode] = self.symbolic_autoencoder_wrapper_zxz(x_embeds_enc=vit_processed_z,  teacher_force_z=False)
-            output_image = self.fold(outputs[training_mode]['id_z'].permute(0, 2, 1))
-            outputs[training_mode]['image'] = output_image * 255.0/2 + 255.0/2 #(self.fold(z_patches.permute(0, 2, 1)) * 255.0/2 + 255.0/2 - z.permute(0,3,1,2)).var(): tensor(1.1724e-12, device='cuda:0')
-            labels[training_mode]['image'] = z.permute(0,3,1,2)
-            outputs[training_mode]['image_caption'] = outputs[training_mode]['id_y']
-            # penalize the patches
-            outputs[training_mode]['logit'] = outputs[training_mode]['id_z']
-            labels[training_mode]['logit']  = z_patches
-
-        elif training_mode == 'xzx':
-            random_batch_of_tokens = self._create_random_batch_of_tokens(batchsize=z_patches_embeds.shape[0], max_num_tokens=10)
-            outputs[training_mode] = self.symbolic_autoencoder_wrapper_xzx(x_ids=random_batch_of_tokens, z_ids=random_batch_of_tokens, teacher_force_z=True)
-            outputs[training_mode]['image'] = self.fold(outputs[training_mode]['id_y'].permute(0, 2, 1)) * 255.0/2 + 255.0/2 #(self.fold(z_patches.permute(0, 2, 1)) * 255.0/2 + 255.0/2 - z.permute(0,3,1,2)).var(): tensor(1.1724e-12, device='cuda:0')
-            labels[training_mode]['image'] = z.permute(0,3,1,2)
-            outputs[training_mode]['image_caption'] = random_batch_of_tokens
-            # penalize the patches
-            outputs[training_mode]['logit'] = outputs['xzx']['logit_z']
-            labels[training_mode]['logit']  = random_batch_of_tokens
-
-        return outputs, labels
+        NotImplementedError("The forward method must be implemented in the derived class.")
     
     def model_step(self, batch, batch_idx=-1, stage='learn', log_things=True):
         x, z, data_type = batch['x'], batch['z'], batch['data_type']
@@ -178,7 +134,9 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         return loss
 
         
-    def _create_random_batch_of_tokens(self, batchsize, max_num_tokens):
+    def _create_random_batch_of_tokens(self, batchsize, max_num_tokens, seed=None):
+        if seed is not None:
+            torch.manual_seed(seed)
         random_batch_of_tokens = torch.randint(4, self.discretizer_x.vocab_size, (batchsize, max_num_tokens)).to(self.device)
         random_batch_of_tokens[:, 0] = 3
         ending_index = torch.randint(1, max_num_tokens, (batchsize,))
@@ -256,9 +214,9 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
     def _initialize_autoreg_wrapped_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.sequence_model_xz = hydra.utils.instantiate(models_config.sequence_model_xz.model)
         self.sequence_model_zx = hydra.utils.instantiate(models_config.sequence_model_zx.model)
-        self.sequence_model_xz_unwrapped = hydra.utils.instantiate(models_config.sequence_model_xz.model_unwrapper, self.sequence_model_xz)
-        self.sequence_model_zx_unwrapped = hydra.utils.instantiate(models_config.sequence_model_zx.model_unwrapper, self.sequence_model_zx)
-        
+        self.sequence_model_xz.train()
+        self.sequence_model_zx.train()
+
         # making it a dictionary from an OmegaConf object
         discretizer_z_config = OmegaConf.to_container(models_config.discretizer_z.config, resolve=True)
         discretizer_x_config = OmegaConf.to_container(models_config.discretizer_x.config, resolve=True)
@@ -266,17 +224,20 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
         models_config.discretizer_x.pop('config')
         self.discretizer_z = hydra.utils.instantiate(models_config.discretizer_z, configs=discretizer_z_config)
         self.discretizer_x = hydra.utils.instantiate(models_config.discretizer_x, configs=discretizer_x_config)
-        if models_config.get('inherit_model_embedding_weights_for_discretizers', False):
-            # Encoder Embedding
-            # self._set_discretizer_weights(self.discretizer_z.encoder_embedding, self.sequence_model_zx_unwrapped['encoder_embedding'])
+        if models_config.sequence_model_zx.config.get('inherit_model_embedding_weights_for_discretizers', False):
+            self.sequence_model_zx_unwrapped = hydra.utils.instantiate(models_config.sequence_model_zx.model_unwrapper, self.sequence_model_zx)
+            self._set_discretizer_weights(self.discretizer_z.encoder_embedding, self.sequence_model_zx_unwrapped['encoder_embedding'])
+            self._set_discretizer_weights(self.discretizer_x.decoder_embedding, self.sequence_model_zx_unwrapped['decoder_embedding'])
+            self._set_discretizer_weights(self.discretizer_x.linear_head, self.sequence_model_zx_unwrapped['linear_head'])
+        if models_config.sequence_model_xz.config.get('inherit_model_embedding_weights_for_discretizers', False):
+            self.sequence_model_xz_unwrapped = hydra.utils.instantiate(models_config.sequence_model_xz.model_unwrapper, self.sequence_model_xz)
             self._set_discretizer_weights(self.discretizer_x.encoder_embedding, self.sequence_model_xz_unwrapped['encoder_embedding'])
-            # Decoder Embeddings
+            self._set_discretizer_weights(self.discretizer_z.decoder_embedding, self.sequence_model_xz_unwrapped['decoder_embedding'])
+            self._set_discretizer_weights(self.discretizer_z.linear_head, self.sequence_model_xz_unwrapped['linear_head'])
             # desc_z_dec_shape = self.discretizer_z.decoder_embedding.weight.data.shape
             # self.discretizer_z.decoder_embedding.weight.data = self.sequence_model_xz_unwrapped['decoder_embedding'].weight.clone()[:self.discretizer_z.decoder_embedding_dim].T[:desc_z_dec_shape[0], :desc_z_dec_shape[1]] 
-            self._set_discretizer_weights(self.discretizer_x.decoder_embedding, self.sequence_model_zx_unwrapped['decoder_embedding'])
-            # Linear Head (for the linear layers)
             # self._set_discretizer_weights(self.discretizer_z.linear_head, self.sequence_model_xz_unwrapped['linear_head'])
-            self._set_discretizer_weights(self.discretizer_x.linear_head, self.sequence_model_zx_unwrapped['linear_head'])
+            
 
         # config for the autoregressive wrapper
         models_config.sequence_model_xz.config.control_token_ids= {'input_pad_token_id': 0}
@@ -298,6 +259,8 @@ class SigmaeLitModuleImageToText(SigmaeLitModuleBase):
                 vector_model=self.sequence_model_xz, input_discretizer=self.discretizer_x, output_discretizer=self.discretizer_z,)
         self.auto_reg_wrapped_model_zx = hydra.utils.instantiate(autoreg_sequence_model_zx, 
                 vector_model=self.sequence_model_zx, input_discretizer=self.discretizer_z, output_discretizer=self.discretizer_x,)
+        
+        
 
     def _initialize_symbolic_autoencoder_wrappers(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.symbolic_autoencoder_wrapper_zxz = hydra.utils.instantiate(models_config.symbolic_autoencoder_wrapper_zxz, 

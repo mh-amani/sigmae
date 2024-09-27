@@ -1,6 +1,7 @@
 _target_: symbolic_bottleneck.auto_reg_wrapper.AutoRegWrapper
 
 config:
+  inherit_model_embedding_weights_for_discretizers: true
   use_past_key_values: False
   use_last_step_states: False
   max_lengths:
