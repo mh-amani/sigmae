@@ -105,8 +105,20 @@ class TextPLDataModule(AbstractPLDataModule):
         ids = np.array([item['id'] for item in batch])
         ids = torch.tensor(ids)
         
-        x_encodings = processor_x(x_texts, padding=True, return_tensors="pt", add_special_tokens=True)
-        z_encodings = processor_z(z_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        if processor_x is not None:
+            x_encodings = processor_x(x_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        else:
+            x_encodings = {}
+            x_encodings['input_ids'] = torch.tensor(x_texts)
+            x_encodings['attention_mask'] = torch.ones_like(x_encodings['input_ids'])*(-1)
+            
+        if processor_z is not None:
+            z_encodings = processor_z(z_texts, padding=True, return_tensors="pt", add_special_tokens=True)
+        else:
+            z_encodings = {}
+            z_encodings['input_ids'] = torch.tensor(z_texts)
+            z_encodings['attention_mask'] = torch.ones_like(z_encodings['input_ids'])*(-1)
+
         
         return {
             'x_ids': x_encodings['input_ids'],

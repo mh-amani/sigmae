@@ -3,14 +3,17 @@
 defaults:
   - example
   - override /data: image
-  - override /data/dataset: image/mnist_dataset
-  - override /model: vit_softmax_bart_cont
+  - override /data/dataset: image/cifar_dataset
+  - override /model: vit_bart_cnn
+  - override /model/components/sequence_models@model.models_config.sequence_model_zx: vision_transformer # vision_transformer_pretrained or vision_transformer
+  - override /model/components/sequence_models@model.models_config.sequence_model_xz: cnn # bart or cnn
 
 trainer:
   min_epochs: 100
   max_epochs: 200
   check_val_every_n_epoch: 5
   log_every_n_steps: 5
+  accumulate_grad_batches: 4
 
 callbacks:
   supervision_scheduler:
@@ -35,14 +38,14 @@ model:
     
   model_params:
     # to be manually set
-    monitor: 'val/loss'
-    x_vocab_size: 17
-    z_patch_size: 16
+    monitor: 'learn/loss'
+    x_vocab_size: 10
     max_x_length: 10
     max_z_length: 50
-    image_size: 28
+    image_size: 32
     num_channels: 3
-    d_model: 512
+    z_patch_size: 16
+    d_model: 768
     inherit_model_embedding_weights_for_discretizers: true
     logging_freq: 200
     training_modes: ['zxz','zxz_unteacherforced','xzx']

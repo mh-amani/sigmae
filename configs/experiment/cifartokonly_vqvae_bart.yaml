@@ -1,0 +1,73 @@
+# @package _global_
+
+defaults:
+  - example
+  - override /data: text
+  - override /data/dataset: text/cifartok_dataset
+  - override /model: bart_bart_times_two
+  - override /model/components/discretizers@model.models_config.discretizer_x: gumbelDB
+  - override /model/components/discretizers@model.models_config.discretizer_z: gumbelDB
+
+
+trainer:
+  min_epochs: 100
+  max_epochs: 200
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 1
+  accumulate_grad_batches: 1
+  # overfit_batches: 5
+
+callbacks:
+  supervision_scheduler:
+    scheduler_xz: 
+      hp_init: 0.0
+      hp_end: 0.0
+    scheduler_z:
+      hp_init: 1.0
+      hp_end: 1.0
+  model_checkpoint:
+    monitor: ${model.model_params.monitor}
+  early_stopping:
+    monitor: ${model.model_params.monitor}
+
+data:
+  supervision_ratio: [.05, 1.00]
+  batch_size: 16
+
+model:
+  models_config:
+    sequence_model_zx:
+      tokenizer: null
+    sequence_model_xz:
+      tokenizer: null
+    discretizer_x:
+      config: 
+        quantize_vector_prob: 0.5
+    discretizer_z:
+      config: 
+        quantize_vector_prob: 0.5
+
+  optimizer:
+    lr: 0.001
+    
+  model_params:
+    # to be manually set
+    monitor: 'learn/loss'
+    
+    z_vocab_size: 1024
+    x_vocab_size: 100
+    max_x_length: 20
+    max_z_length: 256
+
+    image_size: 32
+    num_channels: 3
+    
+    d_model: 256
+    inherit_model_embedding_weights_for_discretizers: False
+    logging_freq: 200
+    
+
+  
+  scheduler:
+    scheduler_config:
+      monitor: ${model.model_params.monitor}

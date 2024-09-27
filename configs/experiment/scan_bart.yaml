@@ -5,8 +5,8 @@ defaults:
   - override /data: text
   - override /data/dataset: text/scan_dataset
   - override /model: bart_bart_times_two
-  - override /model/components/discretizers@model.models_config.discretizer_x: default
-  - override /model/components/discretizers@model.models_config.discretizer_z: default
+  - override /model/components/discretizers@model.models_config.discretizer_x: gumbelDB
+  - override /model/components/discretizers@model.models_config.discretizer_z: gumbelDB
 
 trainer:
   min_epochs: 50
@@ -39,7 +39,7 @@ model:
     z_vocab_size: 10
     max_x_length: 12
     max_z_length: 60
-    d_model: 512
+    d_model: 256
     monitor: 'val/zxz/loss'
   
   models_config:

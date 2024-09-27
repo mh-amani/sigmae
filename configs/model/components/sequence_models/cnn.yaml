@@ -1,0 +1,33 @@
+defaults:
+  - default
+# linear_input_layer:
+#   _target_: torch.nn.Linear
+#   in_features: 
+#   out_features: 10
+
+# linear_output_layer:
+#   _target_: torch.nn.Linear
+#   in_features: 10
+#   out_features: 3
+
+_target_: symbolic_bottleneck.auto_reg_wrapper.identity_auto_reg_wrapper.IdentityAutoRegWrapper
+
+model:
+  _target_: diffusers.models.autoencoders.vae.Decoder
+
+  in_channels: 10
+  out_channels: 3
+  up_block_types: 
+    - UpDecoderBlock2D
+    - UpDecoderBlock2D
+  block_out_channels:
+    - 64
+    - 64
+  layers_per_block: 2
+  norm_num_groups: 32
+  act_fn: silu
+  norm_type: group
+  mid_block_add_attention: true
+
+config:
+  inherit_model_embedding_weights_for_discretizers: false

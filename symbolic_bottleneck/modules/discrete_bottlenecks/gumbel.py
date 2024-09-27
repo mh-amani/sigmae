@@ -1,7 +1,7 @@
 from .abstract_bottleneck import AbstractBottleneck
 import torch
 from torch.nn.functional import gumbel_softmax
-
+import numpy as np
 
 class GumbelDiscreteBottleneck(AbstractBottleneck):
     def __init__(self, configs) -> None:
@@ -16,11 +16,12 @@ class GumbelDiscreteBottleneck(AbstractBottleneck):
         score = gumbel_softmax(logits, hard=False, dim=-1)
         one_hot_idx = gumbel_softmax(logits, hard=True, dim=-1)
         idx = torch.argmax(one_hot_idx, dim=-1)
-        if self.quantize_vector:
+        quantize_vector = np.random.binomial(1, self.quantize_vector_prob)
+        if quantize_vector:
             # idx @ self.encoder_embedding.weight - self.encoder_embedding(idx.argmax(dim=-1)) == 0.0
             quantized_vector_encoder = one_hot_idx @ self.encoder_embedding.weight
             quantized_vector_decoder = one_hot_idx @ self.decoder_embedding.weight
-        elif not self.quantize_vector:
+        elif not quantize_vector:
             quantized_vector_encoder = torch.matmul(score, self.encoder_embedding.weight)
             quantized_vector_decoder = torch.matmul(score, self.decoder_embedding.weight)
 

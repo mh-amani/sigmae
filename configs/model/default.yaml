@@ -12,6 +12,8 @@ model_params:
   max_x_length: ???
   max_z_length: ???
   d_model: ???
+  discretize_x: 1.0
+  discretize_z: 1.0
   compile: false # compile model for faster training with pytorch 2.0
 
 optimizer:
@@ -36,5 +38,5 @@ scheduler:
   scheduler_config:
     interval: "epoch" # The unit of the scheduler's step size. 'step' or 'epoch
     frequency: 1 # corresponds to updating the learning rate after every `frequency` epoch/step
-    monitor: "val/loss"
+    monitor: ${model.model_params.monitor}
     strict: False

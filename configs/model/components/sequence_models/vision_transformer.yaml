@@ -1,4 +1,5 @@
-
+defaults:
+  - default
 
 _target_: symbolic_bottleneck.auto_reg_wrapper.ImageInputAutoRegWrapper
 
@@ -9,7 +10,7 @@ model:
     encoder_config:
       _target_: transformers.ViTConfig
       attention_probs_dropout_prob: 0.0
-      encoder_stride: 16
+      encoder_stride: ${model.model_params.z_patch_size}
       hidden_act: "gelu"
       hidden_dropout_prob: 0.0
       hidden_size: ${model.model_params.d_model}
@@ -69,6 +70,7 @@ model_unwrapper:
 
 config:
   output_prepending_ids: null
+  
   max_lengths:
     input: 1 # is  this right ?
     output: 45

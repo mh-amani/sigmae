@@ -4,7 +4,7 @@ from typing import Tuple, Dict
 from omegaconf import OmegaConf
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.accuracy import Accuracy
-from .sigmae_lit_module_base import SigmaeLitModuleBase
+from src.models.sigmae_lit_module_base import SigmaeLitModuleBase
 
 
 class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
@@ -30,8 +30,8 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
         # loss function
         self.criterion = torch.nn.CrossEntropyLoss(ignore_index=-100)
 
-        num_classes_x = self.tokenizer_x.vocab_size
-        num_classes_z = self.tokenizer_z.vocab_size
+        num_classes_x = self.hparams.model_params.x_vocab_size
+        num_classes_z = self.hparams.model_params.z_vocab_size
         self.accuracies, self.losses = torch.nn.ModuleDict(), torch.nn.ModuleDict()
         for split in ['learn', 'val', 'test']: # you can't use 'train' as a key ... it's a reserved word
             self.accuracies.update({split: torch.nn.ModuleDict()})
@@ -39,15 +39,20 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
             for space in ['xz', 'zx', 'xzx', 'zxz']:
                 self.accuracies[split].update({space: torch.nn.ModuleDict()})
                 self.losses[split].update({space: torch.nn.ModuleDict()})
-                for medium in ['token',]: # 'sequence' also can be
-                    # metric objects for calculating and averaging accuracy across batches
-                    self.accuracies[split][space].update(torch.nn.ModuleDict({medium: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)}))
-                    # for averaging loss across batches
-                    self.losses[split][space].update(torch.nn.ModuleDict({medium: MeanMetric()}))
+                # metric objects for calculating and averaging accuracy across batches
+                self.accuracies[split].update(torch.nn.ModuleDict({space: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)}))
+                # for averaging loss across batches
+                self.losses[split].update(torch.nn.ModuleDict({space: MeanMetric()}))
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
-        self.tokenizer_x = hydra.utils.instantiate(models_config.sequence_model_xz.tokenizer, _recursive_=False)
-        self.tokenizer_z = hydra.utils.instantiate(models_config.sequence_model_zx.tokenizer, _recursive_=False)
+        if models_config.sequence_model_xz.get('tokenizer', None) is not None:
+            self.tokenizer_x = hydra.utils.instantiate(models_config.sequence_model_xz.tokenizer, _recursive_=False)
+        else:
+            self.tokenizer_x = None
+        if models_config.sequence_model_zx.get('tokenizer', None) is not None:
+            self.tokenizer_z = hydra.utils.instantiate(models_config.sequence_model_zx.tokenizer, _recursive_=False)
+        else:
+            self.tokenizer_z = None
 
         self._initialize_autoreg_wrapped_models(models_config)
         self._initialize_symbolic_autoencoder_wrappers(models_config)
@@ -71,13 +76,13 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
             labels['zx'] = x_ids
 
         if (data_type[0] and not data_type[1]) or (stage!='learn') or (data_type[0] and data_type[1] and self.usexzx_with_supervised_training):
-            xzx_outputs = self.symbolic_autoencoder_wrapper_xzx(x_ids=x_ids, z_ids=x_ids)
+            xzx_outputs = self.symbolic_autoencoder_wrapper_xzx(x_ids=x_ids, z_ids=x_ids, teacher_force_z=True)
             outputs['xzx'] = xzx_outputs
             outputs['xzx']['logit'] = outputs['xzx']['logit_z']
             labels['xzx'] = x_ids
 
         if (data_type[1] and not data_type[0]) or (stage!='learn') or (data_type[0] and data_type[1] and self.usezxz_with_supervised_training):
-            zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_ids=z_ids, z_ids=z_ids)
+            zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(x_ids=z_ids, z_ids=z_ids, teacher_force_z=True)
             outputs['zxz'] = zxz_outputs
             outputs['zxz']['logit'] = outputs['zxz']['logit_z']
             labels['zxz'] = z_ids
@@ -111,31 +116,31 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
         loss = 0
 
         for space in outputs.keys():
-            for medium in outputs[space].keys():
-                # Create a mask for non-pad tokens
-                non_pad_mask = labels[space][..., 1:] != self.tokenizer_x.pad_token_id if space in ['zx', 'xzx'] else \
-                        labels[space][..., 1:] != self.tokenizer_z.pad_token_id
-                
-                # Temporarily replace pad tokens with -100
-                labels_for_loss = labels[space][..., 1:].clone()
-                labels_for_loss[~non_pad_mask] = -100
+            # Create a mask for non-pad tokens
+            # self.auto_reg_wrapped_model_xz.input_discretizer.pad_token_id
+            pad_token_id = self.auto_reg_wrapped_model_zx.config.control_token_ids.input_pad_token_id if space in ['xz', 'xzx'] else self.auto_reg_wrapped_model_xz.config.control_token_ids.input_pad_token_id
+            non_pad_mask = labels[space][..., 1:] != pad_token_id
+            
+            # Temporarily replace pad tokens with -100
+            labels_for_loss = labels[space][..., 1:].clone()
+            labels_for_loss[~non_pad_mask] = -100
 
-                losses[space]= self.criterion(outputs[space]['logit'][..., :-1, :].permute(0, 2, 1), labels_for_loss)
-                self.losses[stage][space][medium].update(losses[space])
-                loss += losses[space]
+            losses[space]= self.criterion(outputs[space]['logit'][..., :-1, :].permute(0, 2, 1), labels_for_loss)
+            self.losses[stage][space].update(losses[space])
+            loss += losses[space]
 
-                preds[space] = torch.argmax(outputs[space]['logit'], dim=-1)
-                # Use the non-pad mask for accuracy calculation
-                self.accuracies[stage][space][medium](preds[space][..., :-1][non_pad_mask], labels[space][..., 1:][non_pad_mask])
+            preds[space] = torch.argmax(outputs[space]['logit'], dim=-1)
+            # Use the non-pad mask for accuracy calculation
+            self.accuracies[stage][space](preds[space][..., :-1][non_pad_mask], labels[space][..., 1:][non_pad_mask])
 
-                # Log metrics
-                # Use the logging kwargs based on the current stage
-                log_kwargs = self.logging_kwargs[stage]
-                self.log(f"{stage}/{space}/{medium}/loss", self.losses[stage][space]['token'], 
-                        metric_attribute=f"losses_{stage}_{space}_token", **log_kwargs)
-                
-                self.log(f"{stage}/{space}/{medium}/acc", self.accuracies[stage][space]['token'], 
-                        metric_attribute=f"accuracies_{stage}_{space}_token", **log_kwargs)
+            # Log metrics
+            # Use the logging kwargs based on the current stage
+            log_kwargs = self.logging_kwargs[stage]
+            self.log(f"{stage}/{space}/loss", self.losses[stage][space], 
+                    metric_attribute=f"losses_{stage}_{space}_token", **log_kwargs)
+            
+            self.log(f"{stage}/{space}/acc", self.accuracies[stage][space], 
+                    metric_attribute=f"accuracies_{stage}_{space}_token",**log_kwargs)
 
         # loss = losses['xz']
         return loss
@@ -167,23 +172,41 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
             self._set_discretizer_weights(self.discretizer_x.linear_head, self.sequence_model_zx_unwrapped['linear_head'])
 
 
-        models_config.sequence_model_xz.config.control_token_ids= {'input_pad_token_id': self.tokenizer_x.pad_token_id,
-            'output_eos_token_id': self.tokenizer_x.eos_token_id,   
-            'output_pad_token_id': self.tokenizer_x.pad_token_id,
-            'output_unknown_token_id': self.tokenizer_x.unk_token_id}
-        
-        models_config.sequence_model_zx.config.control_token_ids= {'input_pad_token_id': self.tokenizer_z.pad_token_id,
-            'output_eos_token_id': self.tokenizer_z.eos_token_id,   
-            'output_pad_token_id': self.tokenizer_z.pad_token_id,
-            'output_unknown_token_id': self.tokenizer_z.unk_token_id}
-        
-        if models_config.sequence_model_xz.config.get('output_prepending_ids', None) is None:
-            models_config.sequence_model_xz.config['output_prepending_ids'] = [self.tokenizer_x.bos_token_id]
-            # warn the user that the output_prepending_ids is set to the bos_token_id
+        if self.tokenizer_x is not None:
+            models_config.sequence_model_xz.config.control_token_ids= {'input_pad_token_id': self.tokenizer_x.pad_token_id,
+                'output_eos_token_id': self.tokenizer_x.eos_token_id,   
+                'output_pad_token_id': self.tokenizer_x.pad_token_id,
+                'output_unknown_token_id': self.tokenizer_x.unk_token_id}
+            if models_config.sequence_model_xz.config.get('output_prepending_ids', None) is None:
+                models_config.sequence_model_xz.config['output_prepending_ids'] = [self.tokenizer_x.bos_token_id]
+                # warn the user that the output_prepending_ids is set to the bos_token_id
+                print("Warning: output_prepending_ids is set to the bos_token_id")
+        else:
+            models_config.sequence_model_xz.config.control_token_ids= {'input_pad_token_id': 0,
+                'output_eos_token_id': 2,   
+                'output_pad_token_id': 0,
+                'output_unknown_token_id': 1}
+            models_config.sequence_model_xz.config['output_prepending_ids'] = [3]
             print("Warning: output_prepending_ids is set to the bos_token_id")
-        if models_config.sequence_model_zx.config.get('output_prepending_ids', None) is None:
-            models_config.sequence_model_zx.config['output_prepending_ids'] = [self.tokenizer_z.bos_token_id]
         
+
+        if self.tokenizer_z is not None:
+            models_config.sequence_model_zx.config.control_token_ids= {'input_pad_token_id': self.tokenizer_z.pad_token_id,
+                'output_eos_token_id': self.tokenizer_z.eos_token_id,   
+                'output_pad_token_id': self.tokenizer_z.pad_token_id,
+                'output_unknown_token_id': self.tokenizer_z.unk_token_id}
+            if models_config.sequence_model_zx.config.get('output_prepending_ids', None) is None:
+                models_config.sequence_model_zx.config['output_prepending_ids'] = [self.tokenizer_z.bos_token_id]
+                # warn the user that the output_prepending_ids is set to the bos_token_id
+                print("Warning: output_prepending_ids is set to the bos_token_id")
+        else:
+            models_config.sequence_model_zx.config.control_token_ids= {'input_pad_token_id': 0,
+                'output_eos_token_id': 2,   
+                'output_pad_token_id': 0,
+                'output_unknown_token_id': 1}
+            models_config.sequence_model_zx.config['output_prepending_ids'] = [3]
+            print("Warning: output_prepending_ids is set to the bos_token_id")
+            
         autoreg_sequence_model_xz = {'_target_': models_config.sequence_model_xz._target_, 'config': models_config.sequence_model_xz.config}
         autoreg_sequence_model_zx = {'_target_': models_config.sequence_model_zx._target_, 'config': models_config.sequence_model_zx.config}
         self.auto_reg_wrapped_model_xz = hydra.utils.instantiate(autoreg_sequence_model_xz, 

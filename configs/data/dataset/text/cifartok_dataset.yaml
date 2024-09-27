@@ -1,0 +1,7 @@
+defaults: 
+  - default
+
+dataset_name_or_path: ./data/vqgan_cifar10/vqgan_cifar10_tokens_with_random_seq_20_100
+
+input_label: 'x'
+output_label: 'z'

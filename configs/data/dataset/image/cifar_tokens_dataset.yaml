@@ -1,0 +1,8 @@
+defaults: 
+  - default
+
+# dataset_name_or_path: cifar10
+dataset_name_or_path: /dlabscratch1/amani/sigmae/data/vqgan_cifar10/vqgan_cifar10_tokens
+
+input_label: 'tokens'
+output_label: 'image'

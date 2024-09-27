@@ -1,0 +1,29 @@
+defaults: 
+  - default
+
+_target_: symbolic_bottleneck.auto_reg_wrapper.ImageInputAutoRegWrapper
+
+model:
+  _target_: transformers.VisionEncoderDecoderModel.from_pretrained
+  pretrained_model_name_or_path: "nlpconnect/vit-gpt2-image-captioning"
+  
+
+processor:
+  _target_: transformers.ViTImageProcessor.from_pretrained
+  pretrained_model_name_or_path: "nlpconnect/vit-gpt2-image-captioning"
+
+model_unwrapper: 
+  _target_: symbolic_bottleneck.modules.model_unwrapper.transformer_enc_dec_unwrapper.EncoderDecoderUnwrapper
+
+config:
+  output_prepending_ids: null
+  max_lengths:
+    input: 1 # is  this right ?
+    output: 45
+  device: cpu
+  use_past_key_values: False
+  use_last_step_states: False
+  soft_average:
+    p_eos_backward: True
+    p_eos_forward: False 
+    word_embeds_with_scores_forward: True

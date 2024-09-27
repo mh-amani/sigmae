@@ -1,6 +1,7 @@
 from .abstract_bottleneck import AbstractBottleneck
 import torch
 import math
+import numpy as np
 
 # example config for SoftmaxDiscreteBottleneck
 # config = {
@@ -30,12 +31,13 @@ class SoftmaxDiscreteBottleneck(AbstractBottleneck):
         logits= x/self.temperature
         score = torch.softmax(logits, dim=-1)
         idx = torch.argmax(score, dim=-1)
-        if self.quantize_vector:
+        quantize_vector = np.random.binomial(1, self.quantize_vector_prob)
+        if quantize_vector:
             quantized_vector_encoder = self.encoder_embedding_from_id(idx) + torch.matmul(score, self.encoder_embedding.weight) - \
                     torch.matmul(score, self.encoder_embedding.weight).detach()
             quantized_vector_decoder = self.decoder_embedding_from_id(idx) + torch.matmul(score, self.decoder_embedding.weight) - \
                     torch.matmul(score, self.decoder_embedding.weight).detach()
-        elif not self.quantize_vector:
+        elif not quantize_vector:
             quantized_vector_encoder = torch.matmul(score, self.encoder_embedding.weight)
             quantized_vector_decoder = torch.matmul(score, self.decoder_embedding.weight)
         quantization_loss = torch.tensor(0.0).to(x)

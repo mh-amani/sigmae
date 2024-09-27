@@ -1,0 +1,8 @@
+defaults:
+  - default
+
+dataset_name_or_path: zh-plus/tiny-imagenet
+# dataset_name_or_path: frgfm/imagenette
+
+input_label: 'label'
+output_label: 'image'

@@ -3,7 +3,7 @@ _target_: ???
 # and will use themseleves for the unembedding.
 config:
   dimensions: null # None for using the models' encoder and decoder embeddings shapes. otherwise provide a dict with the following keys: vocab_size, encoder_embedding_dim, decoder_embedding_dim, unembedding_dim
-  quantize_vector: True
+  quantize_vector_prob: 1.0
   temperature: 4.0
   encoder_embedding_trainable: True
   decoder_embedding_trainable: True

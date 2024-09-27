@@ -39,7 +39,8 @@ class AbstractBottleneck(nn.Module):
         
         if self.DISCRETE_BOTTLENECK:
         
-            self.quantize_vector = config.get('quantize_vector', True)
+            self.quantize_vector_prob = config.get('quantize_vector_prob', 1.0)
+            assert self.quantize_vector_prob <= 1.0 and self.quantize_vector_prob >= 0.0, 'quantize_vector must be a probability between 0 and 1'
             self.temperature = config.get('temperature', 1.0)
         
         self.vocab_size = dimensions.get('vocab_size', None)

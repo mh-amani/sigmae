@@ -14,8 +14,11 @@ def just_load_dataset_from_hf_or_file_and_make_val_test_dataset(dataset_name_or_
     output_label = kwargs.pop('output_label', 'output')
 
     # Check if it's a Hugging Face dataset
-    if isinstance(dataset_name_or_path, str) and not os.path.exists(dataset_name_or_path):
-        dataset = load_dataset(dataset_name_or_path, **kwargs)
+    if isinstance(dataset_name_or_path, str) or (os.path.isdir(dataset_name_or_path) and os.path.exists(os.path.join(dataset_name_or_path, 'dataset_dict.json'))): 
+        try:
+            dataset = datasets.load_from_disk(dataset_name_or_path)
+        except:
+            dataset = load_dataset(dataset_name_or_path, **kwargs)
     else:
         # Handle file path loading
         if os.path.isfile(dataset_name_or_path):
@@ -33,8 +36,10 @@ def just_load_dataset_from_hf_or_file_and_make_val_test_dataset(dataset_name_or_
             dataset = load_dataset('csv', **kwargs)
         else:
             raise ValueError("Invalid dataset_name_or_path or missing data_files in kwargs")
-
-    dataset = dataset.rename_column(input_label, "x").rename_column(output_label, "z")
+    if input_label != 'x':
+        dataset = dataset.rename_column(input_label, "x")
+    if output_label != 'z':
+        dataset = dataset.rename_column(output_label, "z")
 
     # Split dataset according to train_val_test_split
     train_ratio, val_ratio, test_ratio = train_val_test_split
@@ -101,6 +106,8 @@ class AbstractDataset(Dataset):
         self.dataset = dataset
         self.supervision_ratio = torch.tensor(supervision_ratio).float()
         self.assign_data_type()
+        # self.random_sequence = self._create_random_batch_of_tokens(len(self.dataset), vocab_size=20, max_num_tokens=20)
+        self.random_sequence = torch.ones(len(self.dataset), 20).long() * (-1)
 
     def __len__(self):
         return len(self.dataset)
@@ -121,7 +128,19 @@ class AbstractDataset(Dataset):
         return {
             "id": idx,
             "x": item['x'],
+            "y": self.random_sequence[idx],
             "z": item['z'],
             "data_type": data_type
         }
+    
+    def _create_random_batch_of_tokens(self, batchsize, vocab_size, max_num_tokens, seed=None):
+        if seed is not None:
+            torch.manual_seed(seed)
+        random_batch_of_tokens = torch.randint(4, vocab_size, (batchsize, max_num_tokens))
+        random_batch_of_tokens[:, 0] = 3
+        ending_index = torch.randint(1, max_num_tokens, (batchsize,))
+        for i in range(batchsize):
+            random_batch_of_tokens[i, ending_index[i]] = 2
+            random_batch_of_tokens[i, ending_index[i]+1:] = 0
+        return random_batch_of_tokens
 
