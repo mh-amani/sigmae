@@ -149,6 +149,8 @@ configs/local/default.yaml
 /data/
 /logs/
 .env
+outputs/
+scripts/disposable/
 
 # Aim logging
 .aim

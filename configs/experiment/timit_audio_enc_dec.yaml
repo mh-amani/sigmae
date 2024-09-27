@@ -9,11 +9,16 @@ defaults:
 trainer:
   min_epochs: 50
   max_epochs: 100
+  accumulate_grad_batches: 8
+  
 
 data:
-  supervision_ratio: [0, 1.00]
-  batch_size: 10
+#how much data has x and z; how much of data I'll use for zxz
+  append_speaker_id: True
+  supervision_ratio: [0.0, 1.0]
+  batch_size: 1
   max_audio_length: ${model.model_params.max_z_length}
+  speaker_id_column_name: "speaker_id"
 
 callbacks:
   supervision_scheduler:
@@ -23,6 +28,7 @@ callbacks:
       scheduler_z:
         hp_init: 1.0
         hp_end: 1.0
+
   early_stopping:
     monitor: "val/loss"
     patience: 3
@@ -36,12 +42,13 @@ model:
     lr: 0.0001
     
   model_params:
+    
     # to be manually set
     teacher_force_prob: 0.5
     x_vocab_size: 81
     z_vocab_size: 81
-    max_x_length: 10
-    max_z_length: 258
+    max_x_length: 100
+    max_z_length: 200
     num_mel_bins: 80
     speaker_embedding_dim: 512
     # image_size: 28

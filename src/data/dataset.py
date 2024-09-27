@@ -97,9 +97,10 @@ def make_val_test_dataset(self):
 
 
 class AbstractDataset(Dataset):
-    def __init__(self, dataset, supervision_ratio):
+    def __init__(self, dataset, supervision_ratio, extra_data=[]):
         self.dataset = dataset
         self.supervision_ratio = torch.tensor(supervision_ratio).float()
+        self.extra_data = extra_data
         self.assign_data_type()
 
     def __len__(self):
@@ -117,11 +118,16 @@ class AbstractDataset(Dataset):
     def __getitem__(self, idx):
         item = self.dataset[idx]
         data_type = self.data_type[idx]
+        extra_data = {
+            key: item[key] for key in self.extra_data
+        }
+        
 
         return {
             "id": idx,
             "x": item['x'],
             "z": item['z'],
-            "data_type": data_type
+            "data_type": data_type,
+            **extra_data
         }
 

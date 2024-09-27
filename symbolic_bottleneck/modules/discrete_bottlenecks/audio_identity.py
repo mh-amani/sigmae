@@ -43,8 +43,8 @@ class AudioIdentityBottleneck(AbstractBottleneck):
             #outputs_before_postnet,outputs_after_postnet,logits --> Alternate names for the same thing
             continous_vector, outputs_after_postnet, logits = self.linear_head(x)
             prob = torch.nn.functional.softmax(logits, dim=-1)
-            sampled_eos = logits.sigmoid().sum(dim=-1) >= 0.5 #torch.bernoulli(prob[..., -1])
-
+            sampled_eos = logits.sigmoid().sum(dim=-1) > 0.7 #torch.bernoulli(prob[..., -1])
+            # sampled_eos = torch.zeros_like(prob[..., -1])
             p_eos = prob[..., -1]
             p_not_eos = prob[..., 0]
             additional_outputs = {

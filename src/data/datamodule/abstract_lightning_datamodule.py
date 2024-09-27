@@ -30,6 +30,7 @@ class AbstractPLDataModule(LightningDataModule):
         dataset: Dict[str, Any],
         supervision_ratio: list,
         data_type_sampling_probability: list,
+        extra_data = [],
         batch_size: int = 32,
         num_workers: int = 0,
         pin_memory: bool = False,
@@ -51,6 +52,7 @@ class AbstractPLDataModule(LightningDataModule):
         self.save_hyperparameters(logger=False)
 
         self.supervision_ratio = supervision_ratio
+        self.extra_data = extra_data
         self.data_type_sampling_probability = torch.tensor(data_type_sampling_probability).float()
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -98,9 +100,9 @@ class AbstractPLDataModule(LightningDataModule):
         if not self.data_train and not self.data_val and not self.data_test:
             dataset = hydra.utils.call(self.hparams.dataset, train_val_test_split=self.hparams.train_val_test_split)
             
-            self.data_train = AbstractDataset(dataset['train'], self.supervision_ratio)
-            self.data_val = AbstractDataset(dataset['validation'], [1.0, 0.0])  # Fully supervised
-            self.data_test = AbstractDataset(dataset['test'], [1.0, 0.0])  # Fully supervised
+            self.data_train = AbstractDataset(dataset['train'], self.supervision_ratio, extra_data=self.extra_data)
+            self.data_val = AbstractDataset(dataset['validation'], [1.0, 0.0], extra_data=self.extra_data)  # Fully supervised
+            self.data_test = AbstractDataset(dataset['test'], [1.0, 0.0], extra_data=self.extra_data)  # Fully supervised
 
     def train_dataloader(self) -> DataLoader:
         """
