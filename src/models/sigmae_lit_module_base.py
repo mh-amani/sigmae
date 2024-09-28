@@ -198,6 +198,8 @@ class SigmaeLitModuleBase(LightningModule):
     
     def on_load_checkpoint(self, checkpoint):
         checkpoint["optimizer_states"] = []
+        checkpoint['lr_schedulers'] = []
+        
         
     # Utility function to cleanly set the embedding or linear layer weights from the source model
     def _set_discretizer_weights(self, target, source, clone=True):
