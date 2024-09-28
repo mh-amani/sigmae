@@ -2,7 +2,7 @@ defaults:
   - default
 
 # dataset_name_or_path: cifar10
-dataset_name_or_path: /dlabscratch1/amani/sigmae/data/cifar-10-batches-py
+dataset_name_or_path: /dlabscratch1/amani/sigmae/data/cifar10
 
 input_label: 'label'
 output_label: 'img'
