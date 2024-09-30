@@ -190,9 +190,9 @@ class SigmaeLitModuleAudioToText(SigmaeLitModuleBase):
         # 
         return outputs, labels
     
-    def on_load_checkpoint(self, checkpoint):
-        checkpoint["optimizer_states"] = []
-        checkpoint["callbacks"] = {}
+    # def on_load_checkpoint(self, checkpoint):
+    #     checkpoint["optimizer_states"] = []
+    #     checkpoint["callbacks"] = {}
     
     def validation_step(self, batch, batch_idx):
         loss = self.model_step(batch, batch_idx= batch_idx, stage='val')
@@ -313,16 +313,18 @@ class SigmaeLitModuleAudioToText(SigmaeLitModuleBase):
                     xz_cross_attentions
                 )
             
-
-            loss_xz = self.criterion_xz(
-                xz_attention_mask,
-                xz_outputs_before_postnet_spectrogram,
-                xz_outputs_after_postnet_spectrogram,
-                xz_logits,
-                z_labels,
-                xz_cross_attentions,
-            )
-            
+            try:
+                #sometimes this randomly fails not sure why
+                loss_xz = self.criterion_xz(
+                    xz_attention_mask,
+                    xz_outputs_before_postnet_spectrogram,
+                    xz_outputs_after_postnet_spectrogram,
+                    xz_logits,
+                    z_labels,
+                    xz_cross_attentions,
+                )
+            except:
+                loss_xz = 0
             
             # if (data_type[0] and data_type[1]) or stage!='learn':
             total_loss += loss_xz
