@@ -83,7 +83,6 @@ class AudioPLDataModule(AbstractPLDataModule):
         
         ids = np.array([item['id'] for item in batch])
         ids = torch.tensor(ids)
-
         if append_speaker_id:
             speaker_ids = [item[speaker_id_column_name] for item in batch]
             clean_speaker_ids = []
@@ -92,10 +91,10 @@ class AudioPLDataModule(AbstractPLDataModule):
                 for speaker_id in speaker_ids:
                     for number, capital_letter in number_to_capital_letter.items():
                         speaker_id = speaker_id.replace(number, capital_letter)       
-                clean_speaker_ids.append(speaker_id)
-            speaker_ids = clean_speaker_ids
-                         
-            x_items = [f"{speaker_id} {x}" for x, speaker_id in zip(x_items, speaker_ids)]
+                    clean_speaker_ids.append(speaker_id)
+            
+            x_items = [f"{speaker_id} {x}" for x, speaker_id in zip(x_items, clean_speaker_ids)]
+            
         processed_data = processor_z(
             text= x_items,
             audio_target= z_items,
@@ -112,7 +111,6 @@ class AudioPLDataModule(AbstractPLDataModule):
         to_remove = z_labels.shape[1] % reduction_factor
         
         x_ids = processed_data['input_ids']
-        
         #check if x_ids have a bos token at the beginning
         bos_token_id = processor_z.tokenizer.bos_token_id
         if x_ids[0, 0] != bos_token_id:
