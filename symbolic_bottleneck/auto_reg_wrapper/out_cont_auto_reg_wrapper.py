@@ -60,7 +60,7 @@ class OutContAutoRegWrapper(AbstractAutoRegWrapper):
             
         else:
             # prepend the output_embeds_dec with the output_prepending_embeds_dec
-            output_embeds_dec = torch.cat((self.output_prepending_embeds_dec.repeat(input_embeds_enc.shape[0], 1, 1).to(input_embeds_enc.device), output_embeds_dec), dim=1)
+            output_embeds_dec = torch.cat((self.output_prepending_embeds_dec.repeat(output_embeds_dec.shape[0], 1, 1).to(output_embeds_dec.device), output_embeds_dec), dim=1)
             
         if output_attention_mask is None:
             output_attention_mask = torch.ones(output_embeds_dec.shape[:2], dtype=torch.bool).to(output_embeds_dec.device)

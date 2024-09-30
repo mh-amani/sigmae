@@ -34,7 +34,7 @@ callbacks:
     patience: 3
     mode: "min"
   model_checkpoint:
-    monitor: "val/loss"
+    monitor: "val/zxz/tf/loss"
     mode: "min"
 
 model:

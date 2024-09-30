@@ -105,14 +105,12 @@ class SigmaeLitModuleAudioToText(SigmaeLitModuleBase):
 
 
         if (data_type[0] and data_type[1]) or stage!='learn':
-            
             xz_outputs = self.auto_reg_wrapped_model_xz(input_ids=x_ids, output_embeds_dec=z_embeds,output_attention_mask=z_attention_mask, teacher_force_output=True)
             outputs['xz'] = xz_outputs
             outputs['xz']["outputs_before_postnet_spectrogram"], outputs['xz']["outputs_after_postnet_spectrogram"] = xz_outputs["logit"]       
             outputs["xz"]["eos_logits"] = xz_outputs["score"]
             outputs["xz"]["attention_mask"] = x_mask
             outputs["xz"]["cross_attentions"] = xz_outputs["cross_attentions"]
-            
             zx_outputs = self.auto_reg_wrapped_model_zx(input_ids=z_ids, input_attention_mask =  z_mask, output_ids= x_ids, teacher_force_output=True)
             outputs['zx'] = zx_outputs
             labels['zx'] = x_ids
@@ -143,7 +141,6 @@ class SigmaeLitModuleAudioToText(SigmaeLitModuleBase):
             
             #prepend bos token
             y_prepending_ids =  torch.tensor([self.processor_z.tokenizer.bos_token_id]).expand(bsz, 1).to(z_ids.device)
-            
             zxz_outputs = self.symbolic_autoencoder_wrapper_zxz(
                 x_ids=z_ids,
                 x_attention_mask=z_mask,
@@ -213,7 +210,6 @@ class SigmaeLitModuleAudioToText(SigmaeLitModuleBase):
         # stage = self.trainer.state.stage._value_ # stages are 'fit', 'validate', 'test', 'predict', 'sanity_check'
         x_ids, x_mask, z_ids, z_mask, data_type, z_labels, z_labels_attention_mask = \
             batch['x_ids'], batch['x_mask'], batch['z_ids'], batch['z_mask'], batch['data_type'], batch['z_labels'], batch['z_labels_attention_mask']
-        
         data_type = torch.all(data_type, dim=0)
         teacher_force = True
         if stage == "test":
