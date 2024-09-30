@@ -34,7 +34,8 @@ class SigmaeLitModuleImageToTextCNN(SigmaeLitModuleImageToTextBase):
         self._initialize_autoreg_wrapped_models(models_config)
         self._initialize_symbolic_autoencoder_wrappers(models_config)
         self.image_size = self.processor_z.size['height']
-        self.linear_head = torch.nn.Linear(in_features=self.hparams['model_params']['d_model'], out_features=self.image_size**2//4)
+        self.linear_head = torch.nn.Linear(in_features=self.hparams['model_params']['d_model'], out_features=self.image_size**2) # 
+        # self.linear_head = torch.nn.Linear(in_features=self.hparams['model_params']['d_model'], out_features=self.image_size**2//4) 
 
     def forward(self, x, z, data_type=None, stage='learn', training_mode=None) -> torch.Tensor:
         outputs = {}
@@ -66,7 +67,7 @@ class SigmaeLitModuleImageToTextCNN(SigmaeLitModuleImageToTextBase):
         pad_embeddings[..., :] = self.discretizer_x.decoder_embedding.weight[self.auto_reg_wrapped_model_zx.control_token_ids['output_pad_token_id']]
         embeddings = torch.cat([embeddings, pad_embeddings], dim=1)
         embeddings = self.linear_head(embeddings)
-        embeddings = embeddings.reshape(embeddings.shape[0], embeddings.shape[1], self.image_size//2, self.image_size//2)
+        embeddings = embeddings.reshape(embeddings.shape[0], embeddings.shape[1], self.image_size, self.image_size)
         decoder_outputs = self.auto_reg_wrapped_model_xz(embeddings, )
         outputs[training_mode] = {'id_z': decoder_outputs, 'image':self.unprocessor_z.unprocess(decoder_outputs.detach().cpu().numpy()),     # decoder_outputs * 255.0/2 + 255.0/2,
                                      'image_caption': y_output['id'], 'logit': decoder_outputs}
