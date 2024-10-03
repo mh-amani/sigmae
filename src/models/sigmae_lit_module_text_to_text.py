@@ -43,6 +43,17 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
                 self.accuracies[split].update(torch.nn.ModuleDict({space: Accuracy(task="multiclass", num_classes=num_classes_x if (space == 'zx' or space == 'xzx') else num_classes_z)}))
                 # for averaging loss across batches
                 self.losses[split].update(torch.nn.ModuleDict({space: MeanMetric()}))
+                
+        # if self.hparams.model_params.get("uniform_reg_loss_coeff", 0.0) > 0:
+        #     for split in ['learn', 'val', 'test']:
+        #         self.losses[split].update({"uniform_reg": torch.nn.ModuleDict()})
+        #         self.losses[split].update(torch.nn.ModuleDict({"uniform_reg": MeanMetric()}))
+        if self.hparams.model_params.get("uniform_reg_loss_coeff", 0.0) > 0:
+            for split in ['learn', 'val', 'test']:
+                for space in ["uniform_reg", "sparseness_reg", "uniform_across_batches_reg"]:
+                    self.losses[split].update({space: torch.nn.ModuleDict()})
+                    self.losses[split].update(torch.nn.ModuleDict({space: MeanMetric()}))
+            
 
     def _initialize_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         if models_config.sequence_model_xz.get('tokenizer', None) is not None:
@@ -126,7 +137,7 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
             labels_for_loss[~non_pad_mask] = -100
 
             losses[space]= self.criterion(outputs[space]['logit'][..., :-1, :].permute(0, 2, 1), labels_for_loss)
-            self.losses[stage][space].update(losses[space])
+            self.losses[stage][space](losses[space])
             loss += losses[space]
 
             preds[space] = torch.argmax(outputs[space]['logit'], dim=-1)
@@ -142,8 +153,93 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
             self.log(f"{stage}/{space}/acc", self.accuracies[stage][space], 
                     metric_attribute=f"accuracies_{stage}_{space}_token",**log_kwargs)
 
-        # loss = losses['xz']
+        # if self.hparams.model_params.get("uniform_reg_loss_coeff", 0.0) > 0 and "zxz" in outputs.keys():
+        #     # uniform regularization loss
+        #     uniform_reg_loss = self._compute_uniform_reg_loss(outputs['zxz']['logit_y'], outputs['zxz']['y_attention_mask'])
+        #     self.losses[stage]["uniform_reg"](uniform_reg_loss)
+        #     loss += uniform_reg_loss
+        #     self.log(f"{stage}/uniform_reg_loss", self.losses[stage]["uniform_reg"], 
+        #             metric_attribute=f"losses_{stage}_uniform_reg", **log_kwargs)
+        # return loss
+        if self.hparams.model_params.get("uniform_reg_loss_coeff", 0.0) > 0 and "zxz" in outputs.keys():
+            # uniform regularization loss
+            uniform_reg_loss, sparseness_reg,  uniform_across_batches_reg = self._compute_uniform_reg_loss(outputs['zxz']['logit_y'], outputs['zxz']['y_attention_mask'])
+            for name,loss_i in zip(["uniform_reg", "sparseness_reg", "uniform_across_batches_reg"], [uniform_reg_loss, sparseness_reg,  uniform_across_batches_reg]):
+                self.losses[stage][name](loss_i)
+                self.log(f"{stage}/{name}", self.losses[stage][name],
+                    metric_attribute=f"losses_{stage}_{name}", **log_kwargs)
+            loss += uniform_reg_loss
+            
         return loss
+    
+    # def _compute_uniform_reg_loss(self, logits: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        
+    #     bsz, seq_len, vocab_size = logits.size()
+    #     pad_token_id = self.auto_reg_wrapped_model_xz.config.control_token_ids.input_pad_token_id
+    #     eos_token_id = self.auto_reg_wrapped_model_xz.config.control_token_ids.output_eos_token_id
+    #     bos_token_id = self.auto_reg_wrapped_model_xz.config.control_token_ids.input_bos_token_id
+        
+    #     #set to minimum possible value of logits
+    #     logits[:, :, pad_token_id] = torch.finfo(logits.dtype).min
+    #     logits[:, :, eos_token_id] = torch.finfo(logits.dtype).min
+    #     logits[:, :, bos_token_id] = torch.finfo(logits.dtype).min
+        
+    #     uniform_distr_entropy = torch.log(torch.tensor(vocab_size - 3)).to(logits.device)
+
+    #     logsoftmax = logits[:,:-1].log_softmax(dim=-1)
+        
+    #     scores = logits[:,:-1].softmax(dim=-1)
+        
+    #     true_logp = logsoftmax * attention_mask[:,1:-1].unsqueeze(-1)
+        
+    #     # true_p = scores * attention_mask[:,1:-1].unsqueeze(-1)
+       
+    #     p_logp = (scores * true_logp).sum(dim=-1)
+        
+    #     loss =  (p_logp + uniform_distr_entropy).sum()/ attention_mask[:,1:-1].sum()
+
+    #     return loss
+    
+    def _compute_uniform_reg_loss(self, logits: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        bsz, seq_len, vocab_size = logits.size()
+        pad_token_id = self.auto_reg_wrapped_model_xz.config.control_token_ids.input_pad_token_id
+        eos_token_id = self.auto_reg_wrapped_model_xz.config.control_token_ids.output_eos_token_id
+        bos_token_id = self.auto_reg_wrapped_model_xz.config.control_token_ids.input_bos_token_id
+        #set to minimum possible value of logits
+        logits[:, :, pad_token_id] = torch.finfo(logits.dtype).min
+        logits[:, :, eos_token_id] = torch.finfo(logits.dtype).min
+        logits[:, :, bos_token_id] = torch.finfo(logits.dtype).min
+        
+        uniform_distr_entropy = torch.log(torch.tensor(vocab_size - 3)).to(logits.device)
+        
+        scores = logits[:,:-1].softmax(dim=-1)
+        true_scores = scores * attention_mask[:,1:-1].unsqueeze(-1)
+        mask = torch.ones_like(true_scores).bool()
+        mask[[pad_token_id, eos_token_id, bos_token_id]] = False
+        mask = torch.where(true_scores > 0.0 , mask, torch.tensor(False).to(mask.device))
+        logsoftmax = torch.log(true_scores[mask])
+        
+        
+        # true_p = scores * attention_mask[:,1:-1].unsqueeze(-1)
+        p_logp = (true_scores[mask] * logsoftmax)
+        position_sparseness_loss = - (p_logp).sum()/ attention_mask[:,1:-1].sum()
+        
+        true_scores = scores * attention_mask[:,1:-1].unsqueeze(-1)
+        avg_score = true_scores.sum(dim=[0,1])/ attention_mask[:,1:-1].sum()
+        
+        
+        mask = torch.ones_like(avg_score).bool()
+        mask[[pad_token_id, eos_token_id, bos_token_id]] = False
+        mask = torch.where(avg_score > 0, mask, torch.tensor(False).to(mask.device))
+        
+        log_avg_score = torch.log(avg_score[mask])
+        avg_plogp = (avg_score[mask] * log_avg_score).sum()
+        dkl_uniform = avg_plogp + uniform_distr_entropy
+        # uniform_across_batches_loss = (p_logp - uniform_distr_entropy).sum()/ attention_mask[:,1:-1].sum()
+        
+        loss =  dkl_uniform +  position_sparseness_loss
+        return loss, position_sparseness_loss, dkl_uniform
+        
 
     def _initialize_autoreg_wrapped_models(self, models_config: Dict[str, torch.nn.Module]) -> None:
         self.sequence_model_xz = hydra.utils.instantiate(models_config.sequence_model_xz.model)
@@ -185,7 +281,9 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
             models_config.sequence_model_xz.config.control_token_ids= {'input_pad_token_id': 0,
                 'output_eos_token_id': 2,   
                 'output_pad_token_id': 0,
-                'output_unknown_token_id': 1}
+                'output_unknown_token_id': 1,
+                'input_bos_token_id': 3
+                }
             models_config.sequence_model_xz.config['output_prepending_ids'] = [3]
             print("Warning: output_prepending_ids is set to the bos_token_id")
         
@@ -203,7 +301,8 @@ class SigmaeLitModuleTextToText(SigmaeLitModuleBase):
             models_config.sequence_model_zx.config.control_token_ids= {'input_pad_token_id': 0,
                 'output_eos_token_id': 2,   
                 'output_pad_token_id': 0,
-                'output_unknown_token_id': 1}
+                'output_unknown_token_id': 1,
+                'input_bos_token_id': 3}
             models_config.sequence_model_zx.config['output_prepending_ids'] = [3]
             print("Warning: output_prepending_ids is set to the bos_token_id")
             

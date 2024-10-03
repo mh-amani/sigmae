@@ -1,0 +1,72 @@
+# @package _global_
+
+defaults:
+  - example
+  - override /data: image
+  - override /data/dataset: image/cifar_dataset
+  - override /model: vit_bart_cnn
+  - override /model/components/sequence_models@model.models_config.sequence_model_zx: vision_transformer # vision_transformer_pretrained or vision_transformer
+  - override /model/components/sequence_models@model.models_config.sequence_model_xz: cnn # bart or cnn
+
+trainer:
+  min_epochs: 100
+  max_epochs: 200
+  check_val_every_n_epoch: 5
+  log_every_n_steps: 5
+  accumulate_grad_batches: 4
+
+callbacks:
+  supervision_scheduler:
+    scheduler_xz: 
+      hp_init: 0.0
+      hp_end: 0.0
+    scheduler_z:
+      hp_init: 1.0
+      hp_end: 1.0
+  model_checkpoint:
+    monitor: ${model.model_params.monitor}
+  early_stopping:
+    monitor: ${model.model_params.monitor}
+
+data:
+  supervision_ratio: [0, 1.00]
+  batch_size: 128
+  dataset:
+    dataset_name_or_path: /dlabscratch1/baldwin/sigmae/data/cifar10
+
+
+model:
+  optimizer:
+    lr: 0.0001
+    
+  model_params:
+    # to be manually set
+    monitor: 'learn/loss'
+    x_vocab_size: 10
+    max_x_length: 10
+    max_z_length: 50
+    image_size: 32
+    num_channels: 3
+    z_patch_size: 16
+    d_model: 768
+    inherit_model_embedding_weights_for_discretizers: true
+    logging_freq: 200
+    training_modes: ['zxz','zxz_unteacherforced','xzx']
+    training_probs: [0.65,0.0,0.35]
+    processor:
+      image_mean: 0.5
+      image_std: 0.5
+      image_size: ${model.model_params.image_size}
+  
+  models_config:
+    sequence_model_zx:
+      _target_: symbolic_bottleneck.auto_reg_wrapper.image_input_auto_reg_skip.ImageInputAutoRegWrapperSkip
+      config:
+        skip_epsilon: 0.95
+  
+
+      tokenizer: null
+  scheduler:
+    scheduler_config:
+      monitor: ${model.model_params.monitor}
+  

@@ -12,8 +12,8 @@ model:
     max_position_embeddings: ${add_int:${model.model_params.max_x_length},${model.model_params.max_z_length}}
     encoder_attention_heads: 4
     decoder_attention_heads: 4
-    encoder_ffn_dim: 1024
-    decoder_ffn_dim: 1024
+    encoder_ffn_dim: ${model.model_params.d_model}
+    decoder_ffn_dim: ${model.model_params.d_model}
 
 # tokenizer:
 #   _target_: 'transformers.BartTokenizer.from_pretrained'
